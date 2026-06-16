@@ -1,0 +1,19 @@
+{
+	"cases": [
+		{
+			"name": "keeps workflow gates out of vision",
+			"input": "Create a VISION.md with Merge by Default and Needs Sign-Off sections.",
+			"expected": "Put project direction in VISION.md and route autonomy gates to workflow docs."
+		},
+		{
+			"name": "requires explicit update request",
+			"input": "Requested work conflicts with existing VISION.md, but the user did not ask to update vision.",
+			"expected": "Raise the contradiction and ask which direction wins; do not edit VISION.md."
+		},
+		{
+			"name": "runs lightweight init grill",
+			"input": "Initialize VISION.md for a new project with sparse docs.",
+			"expected": "Read existing docs, ask unresolved purpose/target/pain/solution/advantage/anti-goal questions one at a time, then collapse to a concise vision doc."
+		}
+	]
+}
