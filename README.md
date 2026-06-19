@@ -14,6 +14,19 @@ npx skills@latest add ryangriffinau/skills
 
 Or copy a single skill's directory into your `.claude/skills/` (or `.agents/skills/`).
 
+### Multiple agents / tools: symlink (recommended)
+
+If you run several agent tools (Claude Code, Codex, Cursor) or several repos, **clone once and symlink** the skills into each tool's skills directory rather than copying. One canonical source, edits propagate everywhere, no drift:
+
+```bash
+git clone https://github.com/ryangriffinau/skills ~/code/skills
+# link individual skills into each tool's skills dir
+ln -s ~/code/skills/skills/decision/review-council ~/.claude/skills/review-council
+ln -s ~/code/skills/skills/decision/review-council ~/.codex/skills/review-council
+```
+
+A small bridge script (same idea as a `prompts-bridge`) can keep these links in sync across tools. Copying is fine for a one-off; symlink whenever multiple agents should share — and stay in sync with — a single source of truth.
+
 ## Maturity
 
 Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns **battle-tested** when it clears the structural bar *and* has survived real-world use — see [CONVENTIONS.md](CONVENTIONS.md).
