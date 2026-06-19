@@ -14,7 +14,9 @@ Turns the council from a one-shot tool into a compounding decision system. Every
 Use `scripts/council-ledger.mjs` for all reads/writes (`node` is on PATH system-wide). It generates correct JSON, resolves the project root, and accepts **simple flags** so the model never hand-builds a payload.
 
 ```bash
-S=~/.claude/skills/review-council/scripts/council-ledger.mjs
+# Path to this skill's ledger script — set to wherever you installed the skill:
+S="$HOME/.claude/skills/review-council/scripts/council-ledger.mjs"   # Claude Code
+# S="$HOME/.codex/skills/review-council/scripts/council-ledger.mjs"  # Codex
 
 # at session START:
 node "$S" due                # decisions past revisit-date with NO outcome yet → nag to close them

@@ -4,7 +4,7 @@ status: drafting
 version: 0.3.0
 tags: [git, github, cleanup]
 updated: 2026-06-16
-description: Audits open GitHub pull requests against active Codex sessions, worktrees, branches, and local task trackers, then recommends a closeout action for every PR. Use when the user asks to clean up PRs, find orphaned PRs, match PRs to sessions, reconcile open pull requests, or decide what to close, merge, leave open, or port between staging/main.
+description: Audits open GitHub pull requests against active agent sessions, worktrees, branches, and local task trackers, then recommends a closeout action for every PR. Use when the user asks to clean up PRs, find orphaned PRs, match PRs to sessions, reconcile open pull requests, or decide what to close, merge, leave open, or port between branches (e.g. staging/main).
 ---
 
 # PR Closeout
@@ -29,9 +29,9 @@ Default posture:
 
 2. Collect sources of truth.
    - Open PRs: number, title, author, base, head branch, draft state, mergeability, created/updated timestamps, changed files, body.
-   - Codex sessions: active/recent thread titles, status, cwd, preview.
+   - Agent sessions: active/recent session titles, status, working directory, and any preview/summary your agent exposes.
    - Local git state: worktrees, local/remote branches, current branch, dirty state.
-   - Task/progress state: `.backpocket/orchestrator/tasks/*.json`, `docs/specs/**/PROGRESS.md`, or repo equivalent.
+   - Task/progress state: your task tracker's state files (e.g. a `tasks/*.json` directory) and any progress docs (e.g. `PROGRESS.md`).
    - Optional: CI/check state and PR comments when deciding merge readiness.
 
 3. Build an evidence map.
@@ -50,7 +50,7 @@ Default posture:
    - `leave-open`: active work, intentionally parked, or user says not to touch.
    - `close-unmerged`: redundant, superseded, obsolete draft, or no longer useful.
    - `merge-to-base`: small, mergeable, relevant, and target base is correct.
-   - `port-to-other-base`: relevant change belongs on another branch too, usually staging/main.
+   - `port-to-other-base`: relevant change belongs on another branch too, usually between your long-lived bases (e.g. staging and main).
    - `rebase-or-recreate`: relevant but stale/conflicted/noisy.
    - `ask-owner`: another owner or business decision needed.
    - `do-not-touch`: user explicitly protected it.

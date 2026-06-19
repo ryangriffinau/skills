@@ -8,7 +8,7 @@ High confidence:
 
 - PR head branch exactly matches a local worktree or task branch.
 - PR changed files include a task JSON or progress doc that names the workstream.
-- Active thread title/preview mentions the same problem and branch/task evidence agrees.
+- Active session title/preview mentions the same problem and branch/task evidence agrees.
 - PR body references merged predecessor PRs, CI, or closeout status.
 
 Medium confidence:
@@ -60,7 +60,7 @@ Do not merge code-impacting PRs just because they are old and mergeable. Inspect
 
 Recommend when:
 
-- A change landed on `staging` but also needs `main`, or the reverse.
+- A change landed on one long-lived base (e.g. `staging`) but also needs another (e.g. `main`), or the reverse.
 - A workflow/policy/docs change should apply globally.
 - A cleanup PR is relevant only on a branch that contains the underlying work.
 

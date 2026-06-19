@@ -4,7 +4,7 @@ status: drafting
 version: 0.3.0
 tags: [planning, goals, agents]
 updated: 2026-06-16
-description: Create crisp, verifiable goal prompts and execution plans for long-running Codex work after investigating available context first. Use when the user asks to set, shape, prepare, refine, or plan a goal, mentions /goal or goal mode, asks for acceptance criteria, or wants an agent goal that can run for hours or days.
+description: Create crisp, verifiable goal prompts and execution plans for long-running agent work after investigating available context first. Use when the user asks to set, shape, prepare, refine, or plan a goal, mentions /goal or goal mode (if your agent provides one), asks for acceptance criteria, or wants an agent goal that can run for hours or days.
 ---
 
 # Goal Plan
@@ -41,7 +41,7 @@ The most important output is closed acceptance criteria. Before setting or handi
    - For UI goals, close the specific visual acceptance branches in [UI_VISUAL_ACCEPTANCE.md](UI_VISUAL_ACCEPTANCE.md).
 
 3. Build the goal packet
-   - Goal: one concise sentence suitable for `/goal`.
+   - Goal: one concise sentence suitable for your agent's goal/objective input.
    - Acceptance criteria: objective checks that decide completion.
    - Starting context: files, docs, routes, systems, commands, and suspected hotspots to inspect first.
    - Measurement plan: how progress will be measured, including smoke checks, full checks, benchmarks, evals, screenshots, logs, or artifacts.
@@ -59,7 +59,7 @@ The most important output is closed acceptance criteria. Before setting or handi
 
 5. Set or hand off the goal
    - If the user explicitly asked you to set the goal and a goal tool is available, create it only after the packet is coherent.
-   - Otherwise provide the exact `/goal` text and the supporting execution plan.
+   - Otherwise provide the exact goal text (the prompt your agent will run) and the supporting execution plan.
 
 ## Goal Quality Checklist
 

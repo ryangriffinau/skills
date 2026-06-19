@@ -15,7 +15,7 @@ Commit only current-session work. Never pull unrelated pre-existing changes into
 
 - Read [references/commit-guidelines.md](references/commit-guidelines.md).
 - Read the active instruction stack before committing:
-  - `~/.codex/AGENTS.md`
+  - your agent's global instruction file (e.g. `~/.codex/AGENTS.md` for Codex, or the equivalent for your agent)
   - repo `AGENTS.md`
   - release or changelog docs when relevant
 - Run `git status --short` and inspect the full diff before deciding commit groups.
@@ -26,7 +26,7 @@ Commit only current-session work. Never pull unrelated pre-existing changes into
 Always apply this order:
 
 1. User instruction
-2. Global Codex config
+2. Your agent's global instruction file (e.g. `~/.codex/AGENTS.md` for Codex, or the equivalent for your agent)
 3. Repo `AGENTS.md`
 4. Repo docs and release docs
 5. This skill
@@ -44,11 +44,10 @@ If any higher layer says "multiple atomic commits", treat that as mandatory.
 
 Use the first valid option:
 
-1. Repo-local `./scripts/committer` if it exists and passes `bash -n ./scripts/committer`
-2. Shared ai-config helper at `$AI_CONFIG_HOME/scripts/committer` or `committer` on `PATH`
-3. Manual explicit `git add -- <paths>` plus `git commit -m "<type>: <summary>" -- <paths>`
+1. If your repo or environment provides a commit helper script (e.g. a project-local `scripts/committer`), validate it first with `bash -n <path>` and prefer it
+2. Otherwise use manual explicit `git add -- <paths>` plus `git commit -m "<type>: <summary>" -- <paths>`
 
-If the helper is missing or invalid, say so briefly and use the next fallback.
+If a helper is missing or invalid, say so briefly and fall back to the manual git commands.
 
 ## Workflow
 

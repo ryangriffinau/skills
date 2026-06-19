@@ -16,7 +16,7 @@ Use this rubric when the user asks to commit only the work done in the current s
 Apply commit rules from most general to most specific:
 
 1. User instruction in the current thread
-2. `~/.codex/AGENTS.md`
+2. Your agent's global instruction file (e.g. `~/.codex/AGENTS.md` for Codex, or the equivalent for your agent)
 3. Repo `AGENTS.md`
 4. Repo docs such as `docs/RELEASING.md` or changelog notes
 5. Local skill guidance
@@ -34,11 +34,10 @@ Lower layers cannot weaken a higher-layer atomic-commit rule.
 
 Preferred commit helper order:
 
-1. Local repo `./scripts/committer`
-2. Shared ai-config helper at `$AI_CONFIG_HOME/scripts/committer` or `committer` on `PATH`
-3. Manual explicit git commands
+1. If your repo or environment provides a commit helper script (e.g. a project-local `scripts/committer`), prefer it
+2. Otherwise use manual explicit git commands
 
-Before using a shell helper, validate it with `bash -n`.
+Before using any shell helper, validate it with `bash -n`. The manual git commands are always a safe fallback.
 
 ## Atomic Commit Heuristics
 

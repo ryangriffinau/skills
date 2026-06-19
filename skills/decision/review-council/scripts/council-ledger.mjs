@@ -15,7 +15,7 @@
 // Logging accepts SIMPLE FLAGS so the model never hand-builds JSON:
 //   log-decision --type pricing --question "..." --rec "..." --confidence 0.7 \
 //                --kill "..." --revisit 2026-08-01 \
-//                --leans "Contrarian:against,Executor:for" --guests "Pricing Strategist" --mode full
+//                --leans "Contrarian:against,Executor:for" --guests "Pricing Strategist" --mode standard
 //   log-outcome  --id <id> --outcome right --correct "Contrarian,First Principles" --notes "..."
 // (A single JSON object as the arg or on stdin still works as a fallback.)
 
@@ -108,7 +108,7 @@ function logDecision(input) {
     question: input.question ?? "", recommendation: input.recommendation ?? "",
     confidence: input.confidence ?? null, kill_criteria: input.kill_criteria ?? "",
     revisit_date: input.revisit_date ?? "", advisor_leans: input.advisor_leans ?? {},
-    guests: input.guests ?? [], mode: input.mode ?? "full",
+    guests: input.guests ?? [], mode: input.mode ?? "standard",
   });
   appendJsonl(GLOBAL_FILE, {
     kind: "decision", id, ts, project_id: pid,
