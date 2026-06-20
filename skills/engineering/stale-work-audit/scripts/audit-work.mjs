@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -211,7 +211,7 @@ function matchesDocPattern(repo, file, patterns) {
   const relative = file.slice(repo.length + 1);
   return patterns.some((pattern) => {
     if (pattern.endsWith("/**")) return relative.startsWith(pattern.slice(0, -3));
-    return relative === pattern || relative.endsWith(pattern);
+    return relative === pattern;
   });
 }
 
@@ -480,7 +480,8 @@ export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
   }
 }
 
-const isCli = process.argv[1] === fileURLToPath(import.meta.url);
+const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
+const isCli = invokedPath === fileURLToPath(import.meta.url);
 if (isCli) {
   main();
 }
