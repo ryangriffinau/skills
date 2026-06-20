@@ -1,0 +1,157 @@
+{
+  "cases": [
+    {
+      "name": "deprecated repo points to canonical repo",
+      "repo": "/tmp/old-marketing",
+      "threadText": "The old thread says this was done in the marketing repo.",
+      "profile": {
+        "projectName": "portable-example",
+        "repos": {
+          "canonical": [{ "path": "/tmp/platform", "remote": "https://github.com/example/platform.git" }],
+          "deprecated": [{ "path": "/tmp/old-marketing" }]
+        },
+        "docs": { "contextFiles": ["AGENTS.md"], "patterns": ["docs/**"] },
+        "pullRequests": { "sources": [], "known": [] },
+        "issues": { "sources": [] },
+        "deployments": { "sources": [] },
+        "externalThreads": { "sources": [] }
+      },
+      "snapshot": {
+        "repoDeprecated": true,
+        "docMatches": [],
+        "prMatches": []
+      },
+      "expect": {
+        "status": "Wrong repo / deprecated source"
+      }
+    },
+    {
+      "name": "merged equivalent pr but deployment unknown",
+      "repo": "/tmp/platform",
+      "threadText": "Review the analytics migration. See https://github.com/example/platform/pull/42",
+      "profile": {
+        "projectName": "portable-example",
+        "repos": { "canonical": [{ "path": "/tmp/platform" }], "deprecated": [] },
+        "docs": { "contextFiles": ["AGENTS.md"], "patterns": ["docs/**"] },
+        "pullRequests": {
+          "sources": [],
+          "known": [
+            {
+              "repo": "example/platform",
+              "number": 42,
+              "title": "analytics migration",
+              "state": "merged",
+              "url": "https://github.com/example/platform/pull/42"
+            }
+          ]
+        },
+        "issues": { "sources": [] },
+        "deployments": { "sources": [] },
+        "externalThreads": { "sources": [] }
+      },
+      "snapshot": {
+        "repoDeprecated": false,
+        "docMatches": [],
+        "prMatches": [
+          {
+            "repo": "example/platform",
+            "number": 42,
+            "title": "analytics migration",
+            "state": "merged",
+            "url": "https://github.com/example/platform/pull/42",
+            "direct": true
+          }
+        ]
+      },
+      "expect": {
+        "status": "Done, deploy unverified",
+        "prNumber": 42
+      }
+    },
+    {
+      "name": "open pr means active",
+      "repo": "/tmp/platform",
+      "threadText": "Continue the lead form cleanup.",
+      "profile": {
+        "projectName": "portable-example",
+        "repos": { "canonical": [{ "path": "/tmp/platform" }], "deprecated": [] },
+        "docs": { "contextFiles": ["AGENTS.md"], "patterns": ["docs/**"] },
+        "pullRequests": { "sources": [], "known": [] },
+        "issues": { "sources": [] },
+        "deployments": { "sources": [] },
+        "externalThreads": { "sources": [] }
+      },
+      "snapshot": {
+        "repoDeprecated": false,
+        "docMatches": [],
+        "prMatches": [
+          {
+            "repo": "example/platform",
+            "number": 77,
+            "title": "lead form cleanup",
+            "state": "open",
+            "url": "https://github.com/example/platform/pull/77"
+          }
+        ]
+      },
+      "expect": {
+        "status": "Active",
+        "prNumber": 77
+      }
+    },
+    {
+      "name": "closed equivalent pr means superseded",
+      "repo": "/tmp/platform",
+      "threadText": "The homepage rebuild thread may be stale.",
+      "profile": {
+        "projectName": "portable-example",
+        "repos": { "canonical": [{ "path": "/tmp/platform" }], "deprecated": [] },
+        "docs": { "contextFiles": ["AGENTS.md"], "patterns": ["docs/**"] },
+        "pullRequests": { "sources": [], "known": [] },
+        "issues": { "sources": [] },
+        "deployments": { "sources": [] },
+        "externalThreads": { "sources": [] }
+      },
+      "snapshot": {
+        "repoDeprecated": false,
+        "docMatches": [],
+        "prMatches": [
+          {
+            "repo": "example/platform",
+            "number": 80,
+            "title": "new homepage rebuild",
+            "state": "closed",
+            "url": "https://github.com/example/platform/pull/80",
+            "supersedesThread": true
+          }
+        ]
+      },
+      "expect": {
+        "status": "Superseded",
+        "prNumber": 80
+      }
+    },
+    {
+      "name": "docs only remains unknown",
+      "repo": "/tmp/platform",
+      "threadText": "Check qualification onboarding rewire.",
+      "profile": {
+        "projectName": "portable-example",
+        "repos": { "canonical": [{ "path": "/tmp/platform" }], "deprecated": [] },
+        "docs": { "contextFiles": ["AGENTS.md"], "patterns": ["docs/**"] },
+        "pullRequests": { "sources": [], "known": [] },
+        "issues": { "sources": [] },
+        "deployments": { "sources": [] },
+        "externalThreads": { "sources": [] }
+      },
+      "snapshot": {
+        "repoDeprecated": false,
+        "docMatches": [{ "file": "/tmp/platform/docs/agents.md", "hits": ["qualification"] }],
+        "prMatches": []
+      },
+      "expect": {
+        "status": "Unknown"
+      }
+    }
+  ]
+}

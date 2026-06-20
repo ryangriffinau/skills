@@ -49,3 +49,17 @@ Semver. `battle-tested` skills are `>= 1.0.0`. `refining` typically `0.9.x`. `dr
 ## Source of truth
 
 This repo is canonical. Consuming repos install from it (e.g. `npx skills add ryangriffinau/skills`) and pin via their own lock file — they never hand-edit a vendored copy.
+
+## Setup and init
+
+Skills in this repo are globally installed or symlinked. Repo-specific workflow belongs in local config created by an init step, not in the portable skill itself.
+
+General repo setup should live in a separate setup skill. That setup skill may discover which installed skills need local config and then call each skill's own init workflow. Individual skills own only their own profile schema, prompts, and validation.
+
+Use this split:
+
+- portable skill: reusable workflow, source adapters, scripts, references, evals
+- local profile: repo names, branch names, docs patterns, issue sources, deployment sources, external thread sources
+- repo agent docs: one-line pointer to the local profile when needed
+
+Do not encode one project's task tracker, deployment provider, branch policy, or docs layout as a default global behavior. Use examples and eval fixtures for concrete projects; use profiles for real repos.

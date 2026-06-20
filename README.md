@@ -46,11 +46,12 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
 | [goal-plan](skills/planning/goal-plan) | ⚪ | 0.3.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |
 | [pr-closeout](skills/engineering/pr-closeout) | ⚪ | 0.3.0 | git, github | Audit open PRs against sessions / worktrees / trackers and recommend a closeout for each |
+| [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
 | [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.0 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
 
-> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `add-prompt`) still reference my personal setup (Codex, a local orchestrator, a `committer` script). Generalizing those is the next pass before they're clean for outside use.
+> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
 
 ## Prompts
 
