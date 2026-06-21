@@ -41,7 +41,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 
 | Skill | Status | Ver | Tags | Purpose |
 |---|---|---|---|---|
-| [project-vision](skills/planning/project-vision) | 🟢 | 1.0.0 | planning, vision | Create/apply a compact root `VISION.md` as a durable decision lens |
+| [project-vision](skills/planning/project-vision) | 🟢 | 1.1.0 | planning, vision | Create/apply/check a compact root `VISION.md` as a durable decision lens |
 | [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | decision-making, multi-agent | 5-advisor council + anonymized peer review + chairman verdict + decision ledger |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
 | [goal-plan](skills/planning/goal-plan) | ⚪ | 0.3.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |

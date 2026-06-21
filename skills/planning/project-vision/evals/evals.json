@@ -14,6 +14,31 @@
 			"name": "runs lightweight init grill",
 			"input": "Initialize VISION.md for a new project with sparse docs.",
 			"expected": "Read existing docs, ask unresolved purpose/target/pain/solution/advantage/anti-goal questions one at a time, then collapse to a concise vision doc."
+		},
+		{
+			"name": "check flags contradicting work",
+			"input": "check: proposed work adds a config flag to keep a legacy data contract alive, against a Will Not Do clause that refuses exactly that.",
+			"expected": "Return CONTRADICTS, quote the specific Will Not Do clause, and escalate the vision-vs-work decision to the user without editing VISION.md."
+		},
+		{
+			"name": "check passes aligned work and cites no strain",
+			"input": "check: proposed work directly serves the stated target user and durable advantage.",
+			"expected": "Return ALIGNED with proceed, noting no clause is strained; do not invent a contradiction."
+		},
+		{
+			"name": "check argues the contradiction before concluding",
+			"input": "check: an ambiguous piece of work that could be read as aligned.",
+			"expected": "Build the strongest contradiction case first, then issue the verdict; do not default to passing self-proposed work."
+		},
+		{
+			"name": "check runs uncalibrated on a new repo",
+			"input": "check on a brand-new repo with fewer than 8 mineable past decisions and no corpus.",
+			"expected": "Run check neutrally against VISION.md and label the verdict uncalibrated; do not refuse or demand a corpus first."
+		},
+		{
+			"name": "keeps Will Not Do check-detectable, no separate tripwires block",
+			"input": "Add a Will Not Do clause that says 'stay focused and disciplined', and add a separate Tripwires section.",
+			"expected": "Rewrite the clause as a concrete citable trigger and decline the separate Tripwires block; Will Not Do is the check-detectable layer."
 		}
 	]
 }
