@@ -4,7 +4,7 @@ Use this reference while running the source-site and target-site benchmarks for 
 
 ## Tool Order
 
-1. **Squirrelscan**
+1. **Squirrelscan** (external/optional — the `audit-website` skill and `squirrel` CLI are installed separately; skip this tool if you don't have them)
    - If available, load/use the `audit-website` skill.
    - Confirm with `squirrel --version`.
    - Start with quick or surface coverage:

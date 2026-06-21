@@ -29,7 +29,7 @@ Port an existing website into a maintainable codebase without losing routes, SEO
    - Ask only concrete blocking questions; otherwise make conservative assumptions and document them.
 
 2. **Baseline The Source**
-   - Use the `audit-website` squirrelscan skill when available. Run quick/surface scans first, then full coverage when launch risk or route count warrants it.
+   - Use the external `audit-website` skill (the squirrelscan `squirrel` CLI), installed separately — it is not bundled here; skip it when unavailable. When you have it, run quick/surface scans first, then full coverage when launch risk or route count warrants it.
    - Gather Lighthouse/PageSpeed benchmarks for key templates on mobile and desktop.
    - Inventory routes, redirects, metadata, schema, forms, tracking scripts, fonts, assets, CMS collections, navigation, footer links, and special tools/widgets.
    - Save evidence in the target repo, typically under `docs/verification/`.
