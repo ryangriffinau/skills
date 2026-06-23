@@ -9,23 +9,35 @@ Only skills I wrote live here. Skills I use but didn't author (Anthropic's, Matt
 Install the whole collection with the [`skills`](https://github.com/mattpocock/skills) CLI:
 
 ```bash
-npx skills@latest add ryangriffinau/skills
+npx skills@latest add ryangriffinau/skills                       # all skills
+npx skills@latest add ryangriffinau/skills --skill review-council  # just one
 ```
 
-Or copy a single skill's directory into your `.claude/skills/` (or `.agents/skills/`).
+GitHub is the registry — there's no publish step. The CLI clones this repo, vendors the skills into your agent's skills directory, auto-detects the agent, and records each in `skills-lock.json` (source + version hash). Or copy a single skill's directory in by hand.
 
-### Multiple agents / tools: symlink (recommended)
+### Sharing one install across tools
 
-If you run several agent tools (Claude Code, Codex, Cursor) or several repos, **clone once and symlink** the skills into each tool's skills directory rather than copying. One canonical source, edits propagate everywhere, no drift:
+`skills add` installs these as vendored copies into one skills directory. If you run several agent tools (Claude Code, Codex, Cursor), keep a **single canonical install** and symlink *that installed copy* into each tool — so one `skills update` keeps every tool current:
 
 ```bash
-git clone https://github.com/ryangriffinau/skills ~/code/skills
-# link individual skills into each tool's skills dir
-ln -s ~/code/skills/skills/decision/review-council ~/.claude/skills/review-council
-ln -s ~/code/skills/skills/decision/review-council ~/.codex/skills/review-council
+# install once into your canonical skills dir (e.g. ~/.agents/skills), then point each tool at it
+ln -s ~/.agents/skills/review-council ~/.claude/skills/review-council
+ln -s ~/.agents/skills/review-council ~/.codex/skills/review-council
 ```
 
-A small bridge script (same idea as a `prompts-bridge`) can keep these links in sync across tools. Copying is fine for a one-off; symlink whenever multiple agents should share — and stay in sync with — a single source of truth.
+Symlink the **installed copy**, not a clone of this repo — that keeps `skills update` the single update path and avoids two sources of truth.
+
+## Updating
+
+Installed skills are pinned vendored copies — nothing auto-updates when this repo changes. Pull updates with the CLI, and run it regularly:
+
+```bash
+npx skills check            # show which installed skills are behind
+npx skills update           # update all of them
+npx skills update <skill>   # update just one
+```
+
+`skills update` re-pulls from this repo and rewrites the matching `skills-lock.json` entries. Treat these exactly like any other CLI-installed skill: add with `skills add`, keep current with `skills update`.
 
 ## Maturity
 
@@ -49,7 +61,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
-| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.0 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
+| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.2 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
 
 > Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
 
@@ -57,15 +69,28 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 
 Slash-command prompts live separately from skills (following Jeffrey Emanuel's split between skills and prompts). Drop them in your prompts directory; they're invoked as `/p-<name>`.
 
+Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts](https://jeffreysprompts.com/).
+
 | Prompt | Status | Purpose |
 |---|---|---|
 | [p-smart-accretive-improvement](prompts/p-smart-accretive-improvement.md) | 🟢 | The single smartest, most accretive next addition to a plan or project |
 | [p-pre-mortem](prompts/p-pre-mortem.md) | 🟢 | Assume it failed — work backwards to the causes |
 | [p-unsummarizable](prompts/p-unsummarizable.md) | 🟢 | Strip writing until no word can be cut without losing an idea |
+| [p-draft-plan](prompts/p-draft-plan.md) † | 🟡 | Draft one extremely detailed implementation plan, to fan out across competing models |
+| [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Compare competing plans and synthesize a stronger hybrid plan |
+| [p-plan-to-beads](prompts/p-plan-to-beads.md) † | 🟡 | Decompose a finalized plan into a granular Beads graph via the `br` CLI |
+| [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Check whether a project actually has the intended outcome |
+| [p-fresh-eyes-review](prompts/p-fresh-eyes-review.md) † | 🟢 | Re-read recent code changes with fresh eyes and fix obvious issues |
+| [p-agent-swarm-launcher](prompts/p-agent-swarm-launcher.md) † | 🟢 | Launch coordinated agent work from repo instructions |
+| [p-idea-wizard](prompts/p-idea-wizard.md) † | 🟢 | Generate, evaluate, and implement top project improvement ideas |
+| [p-premortem-planner](prompts/p-premortem-planner.md) † | 🟡 | Premortem a plan and revise it around failure modes |
+| [p-deep-project-primer](prompts/p-deep-project-primer.md) | 🟡 | Read project instructions and understand architecture |
+| [p-deploy-and-verify](prompts/p-deploy-and-verify.md) | 🟡 | Deploy an app and verify desktop and mobile behavior |
+| [p-copy-deslopifier](prompts/p-copy-deslopifier.md) | 🟡 | Brand/voice-neutral cleanup of AI-sounding copy, narrower than `copy-editing` |
 
 ## Credits
 
-`review-council` is based on Andrej Karpathy's LLM Council idea; the implementation, peer-review flow, and decision ledger are mine. Everything else is original.
+`review-council` is based on Andrej Karpathy's LLM Council idea; the implementation, peer-review flow, and decision ledger are mine. The `†` prompts are attributed to Jeffrey Emanuel's [Jeffrey's Prompts](https://jeffreysprompts.com/). Everything else is original.
 
 ## License
 

@@ -1,14 +1,15 @@
 ---
 name: add-prompt
 status: drafting
-version: 0.3.0
+version: 0.3.2
 tags: [meta, prompts, tooling]
-updated: 2026-06-16
+updated: 2026-06-23
 description: >
   Create a new reusable slash-command prompt (the /p-* commands) for Claude Code, Codex, and
   similar clients. Use when the user wants to add or save a prompt, make a "/p-" command, turn
-  an instruction into a slash command, or grow their prompt library. Writes the markdown, uses
-  a p- prefix by convention, and bridges the prompts directory so it surfaces in each tool.
+  an instruction into a slash command, or grow their prompt library. Captures user-provided
+  prompt bodies verbatim, writes the markdown, uses a p- prefix by convention, and bridges the
+  prompts directory so it surfaces in each tool.
 ---
 
 # add-prompt
@@ -32,7 +33,7 @@ into a slash command", "add to my prompt library".
 
 ## Steps
 
-1. **Settle the spec** (ask only if unclear): a short kebab **name**, a punchy one-line **description** for the dropdown, the **body**, and whether it takes args (`$ARGUMENTS` for the whole tail, `$1 $2 …` positional). By convention this library prefixes the filename with `p-`; keep or drop that to taste.
+1. **Settle the spec** (ask only if unclear): a short kebab **name**, a punchy one-line **description** for the dropdown, the **body**, and whether it takes args (`$ARGUMENTS` for the whole tail, `$1 $2 …` positional). By convention this library prefixes the filename with `p-`; keep or drop that to taste. If the user already provided the prompt body, treat it as final source text, not draft material to rewrite.
 2. **Pick scope:** global (visible everywhere, default) or project (one repo). Remember global-only clients won't see project-scope prompts.
 3. **Create the file** (primary, tool-agnostic path): write `<name>.md` (e.g. `p-<name>.md` if you keep the prefix) into your prompts directory:
    - Global: your canonical global dir (e.g. `~/.agents/prompts/` or directly `~/.claude/commands/`).
@@ -44,12 +45,15 @@ into a slash command", "add to my prompt library".
    ~/.agents/bin/new-prompt <name> --project -d "<description>"  # this repo → Claude/Cursor
    ```
    `new-prompt` adds the `p-` prefix and calls `prompts-bridge` (idempotent) to guarantee the directory symlinks. This is optional — the manual path above works without these scripts.
-5. **Write the real body** into the file (replacing any scaffolded TODO). Keep it fluff-free; lead with the instruction, then any framing.
+5. **Write the real body** into the file (replacing any scaffolded TODO). If the user supplied prompt text, paste that body verbatim: preserve wording, order, line breaks, emphasis, punctuation, and placeholders. Do not tighten, restructure, rename concepts, add missing sections, add `$ARGUMENTS`, or otherwise "improve" the body unless the user explicitly asks for that edit. Only add the required prompt frontmatter around it.
 6. **Verify:** confirm the file resolves through the client's command dir (for the author's layout, `~/.claude/commands` and `~/.codex/prompts`), then tell the user to type `/<name>` (or `/p-<name>` with the prefix).
+7. **Update the prompt index if this repo maintains one:** add the prompt to `README.md` or the relevant index. Default new prompts to refining (`🟡`) unless the user explicitly says they are battle-tested (`🟢`) or another maturity applies.
+8. **Optional suggestions:** after the prompt is added verbatim and verified, you may offer concise, clearly separate suggestions for accretive improvements. Do not apply them unless the user asks.
 
 ## Rules
 
 - Only `.md` files belong in the prompts/command folders — each becomes a command. Keep docs and scripts elsewhere.
+- The prompt body is user-owned. When a user provides the prompt text, store it verbatim on first creation. Smart suggestions belong in the response after creation, not silently inside the saved prompt.
 - Never delete files; renaming is fine (e.g. to re-prefix).
 - If a prompt doesn't show up, the most common cause is a missing or broken directory symlink — recreate the bridge for that client's command dir (the author's helper: `~/.agents/bin/prompts-bridge`, add `--project` inside a repo).
 - If you maintain an index/reference of your prompts, keep it as a regular file outside the command dirs so it isn't mistaken for a command.
