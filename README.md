@@ -13,19 +13,11 @@ npx skills@latest add ryangriffinau/skills                       # all skills
 npx skills@latest add ryangriffinau/skills --skill review-council  # just one
 ```
 
-GitHub is the registry — there's no publish step. The CLI clones this repo, vendors the skills into your agent's skills directory, auto-detects the agent, and records each in `skills-lock.json` (source + version hash). Or copy a single skill's directory in by hand.
+GitHub is the registry — there's no publish step. The CLI clones this repo, installs each skill into your universal skills directory (`~/.agents/skills`), auto-symlinks agent dirs like `~/.claude/skills`, and records the install in its lockfile (source + version).
 
-### Sharing one install across tools
+### Multiple tools — the CLI handles it, no manual symlinks
 
-`skills add` installs these as vendored copies into one skills directory. If you run several agent tools (Claude Code, Codex, Cursor), keep a **single canonical install** and symlink *that installed copy* into each tool — so one `skills update` keeps every tool current:
-
-```bash
-# install once into your canonical skills dir (e.g. ~/.agents/skills), then point each tool at it
-ln -s ~/.agents/skills/review-council ~/.claude/skills/review-council
-ln -s ~/.agents/skills/review-council ~/.codex/skills/review-council
-```
-
-Symlink the **installed copy**, not a clone of this repo — that keeps `skills update` the single update path and avoids two sources of truth.
+You don't symlink anything by hand. `skills add` installs each skill as a **real directory** in the universal skills dir (`~/.agents/skills`), which Codex, Cursor, Warp, and most agents read directly, and **auto-symlinks** agent-specific dirs (e.g. `~/.claude/skills`) back to it. To cover more agents, re-run `skills add` and select them (or pass `-a`), or run `npx skills experimental_sync`. One `npx skills update` then keeps every tool current.
 
 ## Updating
 
@@ -62,8 +54,9 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
 | [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.2 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
+| [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.1.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
 
-> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
+> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`, `flywheel-local-launcher`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
 
 ## Prompts
 

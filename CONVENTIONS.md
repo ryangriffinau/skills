@@ -52,7 +52,7 @@ This repo is canonical. Consuming repos install from it (e.g. `npx skills add ry
 
 ## Setup and init
 
-Skills in this repo are globally installed or symlinked. Repo-specific workflow belongs in local config created by an init step, not in the portable skill itself.
+Skills in this repo are installed and updated via the `skills` CLI (`npx skills add` / `npx skills update`), which installs to `~/.agents/skills` and auto-symlinks agent dirs. Repo-specific workflow belongs in local config created by an init step, not in the portable skill itself.
 
 General repo setup should live in a separate setup skill. That setup skill may discover which installed skills need local config and then call each skill's own init workflow. Individual skills own only their own profile schema, prompts, and validation.
 
