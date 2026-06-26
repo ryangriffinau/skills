@@ -1,9 +1,9 @@
 ---
 name: flywheel-local-launcher
 status: drafting
-version: 0.1.0
+version: 0.2.0
 tags: [agents, flywheel, orchestration, setup]
-updated: 2026-06-23
+updated: 2026-06-24
 description: Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, and runs per-repo init (beads, ntm hooks, Agent Mail lease guard). Use when onboarding or setting up a repo for multi-agent flywheel work, when a project needs symlinking into projects_base, or to verify the stack before launching a swarm.
 ---
 
@@ -44,4 +44,7 @@ bash scripts/flywheel-link.sh setup       # link + init this repo
 - Idempotent: re-running `link`/`setup` on an already-prepared repo is safe.
 
 ## Reference
-`references/cheatsheet.md` — the full human-facing workflow: core-flywheel loop (plan → encode → swarm → ship), install policy, and the **raw** `ntm spawn` / `ntm controller` launch + monitor commands. Read it for the day-to-day flow; this skill only covers preflight + linking + per-repo init.
+- `references/cheatsheet.md` — the full human-facing workflow: core-flywheel loop (plan → encode → swarm → ship), install policy, and the **raw** `ntm spawn` / `ntm controller` launch + monitor commands.
+- `references/branching-model.md` — how branching works with no worktrees: trunk-based one-tree coordination, multiple-features-as-beads, and one-machine vs multiple-machine (RU) operation.
+
+Read these for the day-to-day flow; this skill only covers preflight + linking + per-repo init.
