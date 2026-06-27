@@ -108,7 +108,7 @@ So **NTM owns stages 3–6** (the swarm) plus the *optional* parallel-drafting s
 - Verify: `bv ready` (shows unblocked work), `br graph` (visualize the DAG).
 
 ### Stages 3–5 — Triage / Implement / Close (the swarm)
-- Launch the swarm per §6. Each agent loops: `bv` (next ready bead) → reserve files via Agent Mail → `cass pack --robot "<bead topic>"` → implement + test → `ubs --fail-on-warning .` → **`/p-fresh-eyes-review`** → `br close`. Closing reshapes the graph; the next agent gets a better map.
+- Launch the swarm per §6. Each agent loops: `bv` (next ready bead) → reserve files via Agent Mail → `cass pack --robot "<bead topic>"` → implement + test → `ubs --staged --fail-on-warning` → **`/p-fresh-eyes-review`** → `br close`. Closing reshapes the graph; the next agent gets a better map.
 
 ### Stage 6 — Ship (see §7)
 
@@ -120,7 +120,7 @@ So **NTM owns stages 3–6** (the swarm) plus the *optional* parallel-drafting s
 # 1) launch the generalist Codex swarm with the flywheel kickoff prompt
 ntm spawn <name> --cod=2 --assign --strategy=dependency \
   --cass-context "<area>" \
-  --init-prompt "Follow AGENTS.md. Run /p-deep-project-primer first. The plan is at docs/specs/<x>/plan.md. Before each bead run: cass pack --robot \"<topic>\". Loop: pick a ready bead with bv; reserve files via Agent Mail before editing; implement + test; run ubs --fail-on-warning . and a fresh-eyes review; br close. One shared tree on the current branch — NEVER create git worktrees."
+  --init-prompt "Follow AGENTS.md. Run /p-deep-project-primer first. The plan is at docs/specs/<x>/plan.md. Before each bead run: cass pack --robot \"<topic>\". Loop: pick a ready bead with bv; reserve files via Agent Mail before editing; implement + test; run ubs --staged --fail-on-warning and a fresh-eyes review; br close. One shared tree on the current branch — NEVER create git worktrees."
 
 # 2) attach a Claude controller to coordinate + monitor the Codex workers
 ntm controller <name>
@@ -193,5 +193,5 @@ Manual equivalent: `ln -s /abs/path/to/repo ~/Code/github/<flat-name>`.
 | Plan → Beads graph | `/p-plan-to-beads` |
 | Onboard agents to a repo | `/p-deep-project-primer` |
 | Launch coordinated swarm work | `/p-agent-swarm-launcher`, `ntm spawn` + `ntm controller` (see §6) |
-| Per-bead quality before close | `ubs --fail-on-warning .`, `/p-fresh-eyes-review` |
+| Per-bead quality before close | `ubs --staged --fail-on-warning`, `/p-fresh-eyes-review` |
 | Ship | `/commit`, `/commit-whole-diff`, `/pr-closeout`, `/p-deploy-and-verify` |

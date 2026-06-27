@@ -56,7 +56,7 @@ agents_md_check() {
     - Work in the single shared tree on the current branch. NEVER create or use git worktrees.
     - Coordinate via Agent Mail: reserve files before editing; message peers; release when done.
     - Pull next ready work with `bv`; pull prior context with `cass pack --robot "<topic>"`.
-    - Before closing a bead: run `ubs --fail-on-warning .` and a fresh-eyes review.
+    - Before closing a bead: run `ubs --staged --fail-on-warning` and a fresh-eyes review.
 SNIP
   fi
 }
