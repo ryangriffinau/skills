@@ -57,9 +57,20 @@ ntm deps      # expect tmux, Claude, Codex, Agent Mail, br/bv, dcg, cass, ubs al
 ```bash
 cd ~/Code/github/<flat-name>     # the projects_base path (NOT the real nested path — see §C)
 bash <skill>/scripts/flywheel-link.sh setup
-#   link into projects_base · br init (.beads/) · ntm init (.ntm/ + hooks) · ntm guards install (lease guard) · AGENTS.md check
+#   link into projects_base · br init (.beads/) · ntm init (.ntm/ + hooks) · lease guard (§ below) · AGENTS.md check
 ```
 `setup` also checks `AGENTS.md` for the flywheel protocol and prints a snippet if missing (it never auto-edits). The protocol must define: one shared tree / **no git worktrees**, the bead loop, the tool blurbs, and **commit + push immediately after each bead**.
+
+### Guards + husky (the common case)
+`ntm guards install` wants to **own** the pre-commit hook (it writes `.husky/_/pre-commit`) and **fails on any repo that already uses husky** — which is most of them:
+```
+Error: pre-commit hook already exists at .husky/_/pre-commit (use --force to overwrite)
+```
+Do **not** `--force` — that clobbers husky's runner and your lint-staged / typecheck / test steps. Instead **chain** the portable lease guard from the existing hook, which is what `setup` now does automatically when it sees `.husky/pre-commit`:
+1. copies `scripts/file-reservation-guard.sh` (bundled with this skill) into the repo at `scripts/ci/file-reservation-guard.sh`;
+2. prepends one line — `scripts/ci/file-reservation-guard.sh` — to the existing `.husky/pre-commit` (after any shebang).
+
+Now the Agent Mail lease guard runs **alongside** the repo's own checks. The guard is repo-agnostic (machine-wide Agent Mail + `git rev-parse`). One-off bypass: `AGENT_MAIL_BYPASS=1 git commit …`; advisory mode: `AGENT_MAIL_GUARD_MODE=warn`. Non-husky repos fall back to plain `ntm guards install`.
 
 ## C. The projects model + the one-path rule
 

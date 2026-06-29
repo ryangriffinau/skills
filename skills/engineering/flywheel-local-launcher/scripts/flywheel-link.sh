@@ -4,6 +4,8 @@
 # It deliberately does NOT launch swarms or wrap `ntm spawn`.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 base() { ntm config show 2>/dev/null | sed -n 's/^projects_base = "\(.*\)"/\1/p' | head -1; }
 
 preflight() {
@@ -12,7 +14,7 @@ preflight() {
   for t in tmux ntm br bv dcg cass ubs claude codex; do
     if command -v "$t" >/dev/null 2>&1; then echo "  ✓ $t"; else echo "  ✗ $t (missing)"; missing=1; fi
   done
-  if curl -fsS "http://127.0.0.1:8765/api/" -o /dev/null 2>/dev/null || nc -z 127.0.0.1 8765 2>/dev/null; then
+  if curl -fsS --max-time 3 "http://127.0.0.1:8765/" -o /dev/null 2>/dev/null || nc -z 127.0.0.1 8765 2>/dev/null; then
     echo "  ✓ agent-mail server (:8765)"
   else
     echo "  ✗ agent-mail server not running — start it with: am"; missing=1
@@ -61,6 +63,29 @@ SNIP
   fi
 }
 
+install_guard() {
+  # `ntm guards install` wants to OWN the pre-commit hook and fails when husky already has one
+  # (it targets .husky/_/pre-commit). On a husky repo, chain the portable lease guard from the
+  # existing hook instead, so the guard and the repo's own checks both run. See setup.md.
+  local hook=.husky/pre-commit
+  if [ -f "$hook" ]; then
+    mkdir -p scripts/ci
+    cp "$SCRIPT_DIR/file-reservation-guard.sh" scripts/ci/file-reservation-guard.sh
+    chmod +x scripts/ci/file-reservation-guard.sh
+    if grep -q 'file-reservation-guard.sh' "$hook"; then
+      echo "  ✓ lease guard already chained in $hook"
+    elif head -1 "$hook" | grep -q '^#!'; then
+      printf '%s\nscripts/ci/file-reservation-guard.sh\n%s\n' "$(head -1 "$hook")" "$(tail -n +2 "$hook")" > "$hook"
+      echo "  ✓ lease guard chained into existing husky hook (after shebang)"
+    else
+      printf 'scripts/ci/file-reservation-guard.sh\n%s\n' "$(cat "$hook")" > "$hook"
+      echo "  ✓ lease guard chained into existing husky hook"
+    fi
+  else
+    ntm guards install || echo "  (ntm guards install skipped/failed)"
+  fi
+}
+
 setup() {
   local path="${1:-.}" abs b name dest
   abs="$(cd "$path" && pwd)"; b="$(base)"; name="$(basename "$abs")"; dest="$b/$name"
@@ -68,10 +93,10 @@ setup() {
   # Run the inits via the projects_base symlink path (NOT the real nested path) so Agent Mail
   # keys this repo under ONE project, matching `ntm spawn <name>`. See references/setup.md §C.
   ( cd "${dest:-$path}"
-    echo "==> br init";            br init             || echo "  (br init skipped/failed — already initialised?)"
-    echo "==> ntm init";           ntm init           || echo "  (ntm init skipped/failed)"
-    echo "==> ntm guards install"; ntm guards install || echo "  (ntm guards install skipped/failed)"
-    echo "==> AGENTS.md check";    agents_md_check
+    echo "==> br init";         br init   || echo "  (br init skipped/failed — already initialised?)"
+    echo "==> ntm init";        ntm init  || echo "  (ntm init skipped/failed)"
+    echo "==> lease guard";     install_guard
+    echo "==> AGENTS.md check"; agents_md_check
   )
 }
 
