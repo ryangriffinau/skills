@@ -69,6 +69,8 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 
 > Agents run fully autonomous (`--dangerously-*`). The guardrails are **DCG + Agent Mail leases + a feature branch (never `main`)** — that's what replaces worktree isolation. **Stash unrelated/dirty files before spawning** — a mixed tree makes agents hesitant to commit.
 
+**Tear down a finished run:** `ntm kill <name>` (stops the controller + workers), then `ntm cleanup` (clears stale temp files). Held file leases are advisory and expire when agents exit — no manual release. Don't leave a finished swarm running: idle Codex panes burn tokens and its stale locks + accumulated identities clutter the next run. `ntm list` shows what's still live.
+
 ---
 
 ## 4. Shipping
