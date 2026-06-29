@@ -44,7 +44,8 @@ bash scripts/flywheel-link.sh setup       # link + init this repo
 - Idempotent: re-running `link`/`setup` on an already-prepared repo is safe.
 
 ## Reference
-- `references/cheatsheet.md` — the full human-facing workflow: core-flywheel loop (plan → encode → swarm → ship), install policy, and the **raw** `ntm spawn` / `ntm controller` launch + monitor commands.
-- `references/branching-model.md` — how branching works with no worktrees: trunk-based one-tree coordination, multiple-features-as-beads, and one-machine vs multiple-machine (RU) operation.
+- `references/setup.md` — **one-time** setup/config: install the stack, per-machine + per-repo setup, the projects/symlink model + one-path rule, and reasoning-effort defaults. Start here on a new machine or repo.
+- `references/cheatsheet.md` — the **day-to-day** human workflow: the loop (plan → encode → swarm → ship) and the raw `ntm spawn` / `ntm controller` launch + monitor commands.
+- `references/branching-model.md` — branching with no worktrees: trunk-based one-tree coordination, features-as-beads, one-machine vs multiple-machine.
 
-Read these for the day-to-day flow; this skill only covers preflight + linking + per-repo init.
+`setup.md` to get going, `cheatsheet.md` for the day-to-day. This skill itself only covers preflight + linking + per-repo init.

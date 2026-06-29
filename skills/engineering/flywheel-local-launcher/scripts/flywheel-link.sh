@@ -62,9 +62,12 @@ SNIP
 }
 
 setup() {
-  local path="${1:-.}"
+  local path="${1:-.}" abs b name dest
+  abs="$(cd "$path" && pwd)"; b="$(base)"; name="$(basename "$abs")"; dest="$b/$name"
   link "$path"
-  ( cd "$path"
+  # Run the inits via the projects_base symlink path (NOT the real nested path) so Agent Mail
+  # keys this repo under ONE project, matching `ntm spawn <name>`. See references/setup.md §C.
+  ( cd "${dest:-$path}"
     echo "==> br init";            br init             || echo "  (br init skipped/failed — already initialised?)"
     echo "==> ntm init";           ntm init           || echo "  (ntm init skipped/failed)"
     echo "==> ntm guards install"; ntm guards install || echo "  (ntm guards install skipped/failed)"
