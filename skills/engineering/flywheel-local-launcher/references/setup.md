@@ -46,8 +46,9 @@ Set `projects_base` with `ntm config set projects-base ~/Code/github`.
 ### 4. Learn `bv` (do this — the tutorial is excellent)
 `bv` is your **work dashboard**. **Humans run bare `bv`** (an interactive TUI of the whole bead graph) — *not* `bv --robot-*`, which is JSON/TOON for *agents*. Run `bv` once and walk its built-in tutorial; thereafter it's how you watch progress instead of re-typing `br epic status`.
 
-### 5. Verify
+### 5. Build the CASS index + verify
 ```bash
+cass index    # once — builds the GLOBAL session index (all projects) so agents' `cass pack` works
 ntm deps      # expect tmux, Claude, Codex, Agent Mail, br/bv, dcg, cass, ubs all ✓
 ```
 
