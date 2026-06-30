@@ -1,326 +1,245 @@
-# Flywheel Profile — Implementation Plan
+# Flywheel Profile — Implementation Plan (v2)
 
-> A per-repo `.flywheel/profile.toml` that is the single declarative source of truth for a
-> repo's flywheel behavior. Scaffolded deterministically by `fw setup`, consumed by the
-> launcher / ship-bead / issue-projection, and **never** read by the core `br`/`bv`/Agent-Mail
-> loop. Lives in `ryangriffinau/skills` (the `flywheel-local-launcher` skill); adopted by
-> `platform-monorepo` and `customer-template`.
+> A per-repo `.flywheel/profile` (flat, shell-sourceable) that is the single declarative
+> contract for a repo's flywheel behavior. Scaffolded deterministically by `fw setup`, read
+> **only at the edges** (kickoff generator, ship bead, issue-projection) and **never** by the
+> core `br`/`bv`/Agent-Mail loop. **Absence of the file = pure flywheel/Emmanuel defaults.**
+> Lives in `ryangriffinau/skills` (the `flywheel-local-launcher` skill); adopted by
+> `platform-monorepo` + `customer-template`.
+
+> **v2 changes from v1 (reality-check + fresh-eyes incorporated):** flat shell config instead of
+> TOML (deletes the Python reader / version risk); **absence = Emmanuel defaults**; projection
+> split into compute (anywhere) + apply (MCP context); skill assets run **from** the skill (only
+> the lease guard is copied into a repo); ship bead **baked at encode time**; explicit
+> relationship to existing beads `skills-ogi.8/.9/.10`; kickoff uses the bash resolver (no `jq`);
+> generator emits the **full** launch recipe (spawn + controller + readiness note).
 
 ## 1. Goal & intent
-
-Every per-repo *variable* in the flywheel — collaboration mode (solo vs team), package manager,
-gate weight, no-worktrees, issue-tracker projection — currently lives as **prose a human must
-re-apply per repo** (cheatsheet notes, AGENTS.md, hand-typed `ntm spawn --init-prompt`s). That is
-the root cause of the operational drift we hit on every swarm run: dropped spawn flags, wrong
-package-manager commands, the controller prompt mangled to `[Image]`, the heavy-pre-commit crawl.
-
-The Flywheel Profile collapses those variables into **one declarative contract the tooling reads**:
-
-- `fw setup` **scaffolds** it deterministically (with detected defaults).
-- The swarm **kickoff is generated** from it (no more hand-crafted, drift-prone prompt).
-- The **ship bead** reads it (solo → commit-to-main; team → PR + merge-when-green).
-- The **issue-projection** reads it (opt-in beads→tracker mirror).
-
-Non-goal: it does **not** touch or gate the core loop. A repo with **no profile** (or `mode="solo"`)
-runs the entire flywheel with zero team/human features.
+Every per-repo *variable* in the flywheel — collaboration mode (solo/team), package manager, gate
+weight, no-worktrees, issue-tracker projection — currently lives as **prose a human re-applies per
+repo**, which is the root of the operational drift we hit every swarm run. The profile collapses
+those into **one declarative file the tooling reads**, so the kickoff is generated (not hand-typed)
+and the ship behavior is mode-correct. It **never gates the core loop**: a repo with **no profile**
+runs the pure flywheel (Emmanuel's solo-on-main baseline).
 
 ## 2. Design principles (binding)
+1. **Decoupled.** Only three consumers read the profile: the kickoff generator, the ship bead, the
+   projector. `br`/`bv`/Agent-Mail/lease-guard/`cass`/`ubs` never do.
+2. **Absence = Emmanuel defaults.** No `.flywheel/profile` → `mode=solo`, `worktrees=false`,
+   `pre_commit=light`, `pre_push=full`, no projection. Never an error.
+3. **Deterministic.** Same repo state → same scaffold, same resolution. No prompts/network/randomness.
+4. **Non-prescriptive.** Nothing required. `team` without husky is valid. Missing/optional fields
+   degrade to the Emmanuel default for that field.
+5. **No secrets.** Modes + ids only; tracker auth stays in the MCP/env.
+6. **Minimal + accretive.** Flat shell config + small bash helpers; extends existing assets; `fw`
+   stays exactly `link` / `setup` / `list`.
+7. **No eval of repo content.** The resolver **parses** known `FLYWHEEL_*` keys and validates their
+   values against allowed sets — it does **not** blindly `source` the file (injection guard).
 
-1. **Decoupled from the core loop.** `br`, `bv`, Agent Mail, the lease guard, `cass`, `ubs` never
-   read the profile. Only three consumers do: the kickoff generator, the ship bead, the projector.
-2. **Deterministic.** Given the same repo state, `fw setup` writes the same profile; the reader
-   resolves the same values. No prompts, no randomness, no network during resolution.
-3. **Non-prescriptive.** Nothing is *required*. No husky? fine. No CI? fine. No Linear? fine.
-   `mode="team"` without husky is valid. Missing/optional blocks degrade to "feature off."
-4. **No secrets in the profile.** It holds ids and modes only. Tracker auth lives in the MCP/env.
-5. **Minimal + accretive.** Extends existing skill assets (`flywheel-link.sh`, the lease guard,
-   `.ubsignore`, the cheatsheet, `p-plan-to-beads`, `skills-ogi.10`). Adds two small scripts and
-   one config file format. The `fw` CLI keeps exactly its three verbs: `link`, `setup`, `list`.
-
-## 3. Architecture overview
-
+## 3. Architecture
 ```
-        .flywheel/profile.toml            (data; per repo; committed)
-                 │
-                 ▼
-        flywheel-profile.py   ◄── package-manager detection (package.json / lockfile)
-        (the READER: parse + resolve + emit)
-                 │  --json (full resolved profile)   --env (shell vars)
-     ┌───────────┼───────────────────────┐
-     ▼           ▼                        ▼
- flywheel-      p-plan-to-beads      beads-linear-projector
- kickoff.sh     SHIP bead            (issue-projection app=linear)
- (gen ntm       (mode → commit       (reads [issue-projection];
-  spawn cmd)     vs PR+merge)          error-and-continue if not connected)
+   .flywheel/profile        (KEY=value; committed; optional)
+   .flywheel/projects.tsv    (epic<TAB>project-id lines; only if projecting)
+            │
+            ▼
+   flywheel-profile.sh   ◄── package-manager detection (package.json / lockfile)
+   (RESOLVER: parse known keys + apply Emmanuel defaults for missing/absent; emit FLYWHEEL_* vars)
+            │  eval "$(flywheel-profile.sh --repo DIR)"
+   ┌────────┼─────────────────────────┐
+   ▼        ▼                          ▼
+ flywheel-  p-plan-to-beads        beads-linear-projector (COMPUTE)
+ kickoff.sh  SHIP bead (mode baked     reads projects.tsv -> emits linearMcp ops (JSON), no MCP
+ (gen full   at ENCODE time)           │
+  launch                               ▼  APPLY (separate; needs the tracker MCP)
+  recipe)                          run by the human / Claude controller (NOT Codex workers)
 
-   CORE LOOP (br / bv / Agent Mail / lease guard / cass / ubs)  ── never reads the profile ──
-```
-
-The profile is **read at the edges** (launch, ship, projection), never inside the loop.
-
-## 4. The profile schema (`.flywheel/profile.toml`)
-
-```toml
-# .flywheel/profile.toml — per-repo Agent Flywheel contract.
-# Generated by `fw setup`; edit deliberately. Holds NO secrets.
-schema_version = 1
-
-mode = "team"          # "solo" | "team"
-                       #   solo = commit straight to the working branch / main, no PR
-                       #   team = open PR (ready) -> CI + preview -> merge when green
-                       #          (direct for safe/non-prod/template; else user approval)
-
-worktrees = false      # always false; explicit anchor for the no-worktree guard
-
-[gates]
-pre_commit = "light"   # "light" = lease-guard + lint-staged + ubs (fast)
-                       # "heavy" = also typecheck/build/test on every commit (warns: slows commit-immediately)
-pre_push   = "full"    # "full" | "none"
-
-# OPTIONAL — omit the whole block for no issue projection.
-[issue-projection]
-app = "linear"         # tracker app; selects the projector implementation (currently: "linear")
-
-# beads epic id  ->  external tracker project id
-[issue-projection.projects]
-# "platform-monorepo-kwf" = "lin_prj_AbC123"
+   CORE LOOP (br/bv/Agent-Mail/guard/cass/ubs) ── never reads the profile ──
 ```
 
-**Notes (binding):**
-- **No `package_manager` field.** It is *detected* (§5), never stored — avoids drift between the
-  profile and the repo's real toolchain.
-- The `[issue-projection]` block's **presence is the opt-in.** Omit it → no projection, no error.
-- `[issue-projection.projects]` is the **single source** of the epic↔project mapping (it replaces
-  the old per-epic `linear_project_id` metadata).
-- Unknown top-level keys are ignored with a warning (forward-compat); unknown `schema_version` →
-  warn + best-effort read.
-
-## 5. Deterministic resolution
-
-### 5.1 Package manager (detected, in priority order)
-1. `package.json` → `packageManager` field (e.g. `"pnpm@10.25.0"`) → take the name.
-2. Else lockfile presence (repo root): `pnpm-lock.yaml`→`pnpm`, `bun.lockb`→`bun`,
-   `package-lock.json`→`npm`, `yarn.lock`→`yarn`.
-3. Else → `none` (non-JS repo; consumers omit package-manager-specific commands).
-
-Ties are resolved by the order above (1 wins over 2; within 2, pnpm > bun > npm > yarn).
-
-### 5.2 Mode default (when scaffolding a new profile)
-`team` **iff** the repo has a git remote **and** a CI directory (`.github/workflows/` exists);
-else `solo`. Deterministic; the user overrides freely. Rationale: remote + CI ≈ collaborative.
-
-### 5.3 Gates default (when scaffolding)
-- `pre_commit`: `heavy` iff `.husky/pre-commit` matches `typecheck|build|test`, else `light`.
-  If `heavy`, `fw setup` prints the split-suggestion warning (per `skills-ogi.9`).
-- `pre_push`: `full`.
-
-### 5.4 issue-projection default
-Omitted (opt-in). `fw setup` writes a commented example block only.
-
-## 6. The reader — `scripts/flywheel-profile.py`
-
-**Contract.** A single Python script (skill asset). Resolves the effective profile for a repo and
-emits it in a stable machine-readable form. **Deterministic, no network.**
-
+## 4. The config files
+### `.flywheel/profile` (optional; flat, human-readable, parsed not sourced)
+```sh
+# .flywheel/profile — per-repo Agent Flywheel contract. Generated by `fw setup`. No secrets.
+# Absent file = pure flywheel/Emmanuel defaults (solo, no PR, no projection, light gates).
+FLYWHEEL_MODE=team          # solo | team   (solo = commit to working branch, no PR;
+                            #                team = open PR ready -> CI/preview -> merge when green)
+FLYWHEEL_WORKTREES=false    # always false; explicit anchor for the no-worktree guard
+FLYWHEEL_PRECOMMIT=light    # light (guard+lint+ubs) | heavy (also typecheck/build/test; slows commits)
+FLYWHEEL_PREPUSH=full       # full | none
+FLYWHEEL_PROJECTION_APP=linear   # tracker app; empty/absent = no projection
 ```
-flywheel-profile.py [--repo <dir>] [--json | --env]
-  --repo <dir>   repo root (default: $PWD or git toplevel)
-  --json         print the resolved profile as JSON (default)
-  --env          print shell-eval-able vars: FLYWHEEL_MODE, FLYWHEEL_PM, FLYWHEEL_WORKTREES,
-                 FLYWHEEL_PRECOMMIT, FLYWHEEL_PREPUSH, FLYWHEEL_PROJECTION_APP
+Package manager is **detected**, never stored. Any key absent → that field's Emmanuel default.
+
+### `.flywheel/projects.tsv` (only when `FLYWHEEL_PROJECTION_APP` is set)
 ```
-
-**Resolved JSON shape:**
-```json
-{
-  "present": true,
-  "schema_version": 1,
-  "mode": "team",
-  "worktrees": false,
-  "package_manager": "pnpm",
-  "gates": { "pre_commit": "light", "pre_push": "full" },
-  "issue_projection": { "app": "linear", "projects": { "platform-monorepo-kwf": "lin_prj_..." } }
-}
+platform-monorepo-kwf	lin_prj_AbC123
 ```
+Tab-separated `beads-epic-id <TAB> external-project-id`. The **single source** of the epic↔project
+map (replaces per-epic `linear_project_id` metadata). One line per mapped epic.
 
-**Resolution rules:**
-- No `.flywheel/profile.toml` → `{ "present": false, "mode": "solo", "worktrees": false,
-  "package_manager": <detected>, "gates": {"pre_commit":"light","pre_push":"full"},
-  "issue_projection": null }`. (Absence = solo defaults; never an error.)
-- Malformed TOML → exit non-zero with a clear, actionable error (do **not** silently default).
-- TOML parsing: stdlib `tomllib` (Python ≥3.11). If absent, try `import tomli`. If neither,
-  exit with: "Flywheel profile reader needs Python ≥3.11 or `pip install tomli`." `fw preflight`
-  gains a check for this so it's surfaced before a swarm, not mid-run.
-- The reader **never executes** profile content (TOML is data; no eval).
+## 5. Deterministic resolution (`flywheel-profile.sh`)
+A small bash script (skill asset), run **from the skill** with `--repo DIR`. Emits eval-able
+`FLYWHEEL_*` vars on stdout. Read-only, network-free, no `source` of the file.
+1. **Defaults first** (Emmanuel baseline): `MODE=solo WORKTREES=false PRECOMMIT=light PREPUSH=full
+   PROJECTION_APP=` (empty).
+2. **If `.flywheel/profile` exists:** for each known key, `grep -E '^FLYWHEEL_X=...'`, validate the
+   value against its allowed set (else warn-to-stderr + keep the default), override.
+3. **Detect package manager** → `FLYWHEEL_PM`: `package.json` `packageManager` field first; else
+   lockfile (`pnpm-lock.yaml`→pnpm, `bun.lockb`→bun, `package-lock.json`→npm, `yarn.lock`→yarn);
+   else `none`. Tie order = listed order.
+4. Edge: run outside a git repo or with no package file → still emits defaults + `PM=none`.
 
-## 7. `fw setup` scaffolding (extend `scripts/flywheel-link.sh`)
+`fw preflight` gains **no** new dependency check (bash-native; nothing to install).
 
-In `setup()` (after the lease-guard step), add a `scaffold_profile` step:
-- If `.flywheel/profile.toml` **exists** → do nothing but print its resolved summary (idempotent).
-- Else → `mkdir -p .flywheel` and write `profile.toml` with §5 detected defaults:
-  - `mode` per §5.2, `worktrees=false`, `[gates]` per §5.3, `[issue-projection]` as a commented
-    example only.
-  - File begins with the header comment from §4.
-- Print a one-line summary: `✓ .flywheel/profile.toml (mode=team, pm=pnpm, pre_commit=light)`.
-- If `pre_commit=heavy`, print the split warning.
+## 6. `fw setup` scaffolding (extend `scripts/flywheel-link.sh`)
+Add a `scaffold_profile` step (after the lease guard). It writes the **scaffold defaults**, which
+differ from the absence-defaults only for `mode`:
+- If `.flywheel/profile` exists → print its resolved summary; do not overwrite (idempotent).
+- Else → write `.flywheel/profile` with:
+  - `FLYWHEEL_MODE`: **`team` iff the repo has a remote AND `.github/workflows/` exists, else `solo`**
+    (deterministic heuristic; trivially overridden; documented).
+  - `FLYWHEEL_WORKTREES=false`.
+  - `FLYWHEEL_PRECOMMIT`: `heavy` iff `.husky/pre-commit` matches `typecheck|build|test`, else `light`
+    (if `heavy`, also print the split-suggestion warning — this is `skills-ogi.9`).
+  - `FLYWHEEL_PREPUSH=full`.
+  - `FLYWHEEL_PROJECTION_APP=` left empty + a commented example (+ a commented `projects.tsv` hint).
+- Print: `✓ .flywheel/profile (mode=team, pm=pnpm, pre_commit=light)`.
+No new `fw` verb.
 
-`fw setup` stays the same verb; no new `fw` commands.
+## 7. Kickoff generator — `scripts/flywheel-kickoff.sh` (runner-up 1)
+Run **from the skill**: `flywheel-kickoff.sh <session> --plan <path> [--cod N=3] [--cass "<area>"]`.
+- `eval "$(flywheel-profile.sh --repo .)"` → has `FLYWHEEL_MODE/PM/PRECOMMIT/...` (no `jq`).
+- Emits the **full launch recipe** to stdout, all from the resolved profile:
+  1. the **single-line** `ntm spawn … --init-prompt "…"` (pm-correct commands; mode-aware tail —
+     team → "final ship bead opens a PR ready + merges when green", solo → "commit to the working
+     branch, no PR"; always ONE shared tree / NEVER worktrees; if `PRECOMMIT=heavy`, "do the
+     hook-align bead first");
+  2. the **controller recipe**: `ntm controller <session>` then the `tmux send-keys -t
+     <session>:0.<pane> "<brief>"` + Enter (NOT `ntm send` — it mangles Claude prompts to `[Image]`);
+  3. the **readiness note**: if `0/N ready`, respawn cod + re-send the kickoff + `coordinator assign`.
+- **Quoting:** every profile-derived value is shell-quoted; the init-prompt is one safely-quoted arg.
+- Does **not** spawn itself (keeps `fw` minimal; human runs the printed commands + the controller step).
 
-## 8. Kickoff generator — `scripts/flywheel-kickoff.sh`
+## 8. Mode-aware ship bead — `prompts/p-plan-to-beads.md` (runner-up 2)
+The prompt already mandates a final reality-check bead + a ship bead. Refine: at **encode time**,
+`p-plan-to-beads` runs `flywheel-profile.sh --repo .` once and **bakes** the mode-appropriate ship
+instructions into the ship bead's text (self-contained bead; no runtime profile read):
+- `solo`: commit + push to the working branch; no PR.
+- `team`: open the PR **ready** (CI + preview run), then **merge when green** — directly for safe /
+  non-prod / template changes, else with user approval. **The agent must NOT block-poll CI**: it
+  opens the PR ready (+ enables auto-merge if the repo supports it) and lets CI/the human complete.
+- No profile → `solo`. Use the detected package manager for verify commands.
 
-**Purpose:** eliminate the hand-crafted, drift-prone `--init-prompt`. Reads the resolved profile +
-the plan path, prints the exact, single-line `ntm spawn` command (and the controller note).
+## 9. Issue-projection — `app="linear"` (= `skills-ogi.10`), compute/apply split
+- **COMPUTE** (runs anywhere, no MCP): the projector script reads beads + `.flywheel/projects.tsv`
+  and emits the deterministic `linearMcp` ops as JSON (existing `beads-linear-projector` logic,
+  re-pointed from epic-metadata to `projects.tsv`). Runs from the skill with `--repo`.
+- **APPLY** (separate; needs the tracker MCP): an agent **with the Linear MCP** applies the ops —
+  realistically the **human or the Claude controller**, **not** the Codex workers (non-interactive
+  Codex lacks the interactively-authed Linear MCP). 
+- **Trigger (MVP, decoupled):** projection runs as a **final sync in the ship bead** (executed by the
+  MCP-holder), not a per-close loop step. Per-close live updates are a documented future option.
+- **Failure (locked):** `FLYWHEEL_PROJECTION_APP` set but the tracker not connected/authed, or an
+  unknown app → **log a visible error and CONTINUE** (never block). Empty/absent → silent no-op.
 
-```
-flywheel-kickoff.sh <session> --plan <path> [--cod N] [--cass "<area>"]
-```
-
-Behavior:
-- Resolve the profile via `flywheel-profile.py --json` (jq to read fields).
-- Build a **single-line** `--init-prompt` from the profile:
-  - package-manager commands use the detected manager (e.g. `pnpm` vs `bun run`).
-  - the loop: `bv` → reserve via Agent Mail → `cass pack` → implement+test → `ubs --staged
-    --fail-on-warning` → fresh-eyes → `br close` → **commit AND push immediately, explicit paths**.
-  - **mode-gated tail:** `team` → "the final ship bead opens a PR ready for review and merges when
-    green"; `solo` → "commit straight to the working branch; no PR".
-  - always: ONE shared tree, NEVER git worktrees.
-  - if `pre_commit=heavy`: add "do the hook-alignment bead first; commits are slow until then."
-- Emit the full command to stdout (the human pastes it, or wraps it), plus the controller reminder:
-  `tmux send-keys` the coordinator brief (NOT `ntm send` — it mangles Claude prompts to [Image]).
-- **Quoting:** every profile-derived value is shell-quoted; the init-prompt is one safely-quoted
-  arg. No value from the profile is interpolated unquoted (injection guard).
-
-This is a *generator the human runs*; it does not itself spawn (keeps `fw` minimal, keeps the
-human in the loop for the actual launch + the controller-pane step).
-
-## 9. Mode-aware ship bead — update `prompts/p-plan-to-beads.md`
-
-The prompt already mandates a final reality-check bead + a ship bead. Refine the **ship bead** so
-it reads `.flywheel/profile.toml` `mode`:
-- `solo`: commit + push to the working branch (or main per the repo's flow); no PR.
-- `team`: open the PR **ready** (so CI + preview run), then merge when green — directly for safe /
-  non-prod / template changes, otherwise with user approval. Use the **detected package manager**
-  for any verify commands.
-If no profile → treat as `solo`.
-
-## 10. Issue-projection — `skills-ogi.10` becomes `app = "linear"`
-
-The beads→Linear projector (skill asset per the locked `skills-ogi.10` decision) is the first
-`app` implementation:
-- It reads `[issue-projection]` from the profile: `app` selects the impl; `projects` gives the
-  epic→project map.
-- On a bead close under a mapped epic, it emits the deterministic `linearMcp` ops (existing
-  `beads-linear-projector` logic), applied via the Linear MCP.
-- **Failure mode (locked):** if `app="linear"` but Linear is **not connected/authed**, the
-  projector **logs a visible error and CONTINUES** (never blocks the loop). Unknown `app` →
-  same: error-and-continue.
-- `app` absent / block omitted → projector is a no-op (silent).
+## 10. Asset placement (fix #3 — binding)
+- **Copied into a repo:** only `scripts/ci/file-reservation-guard.sh` (it's a git hook).
+- **Scaffolded into a repo (committed config):** `.flywheel/profile` (+ `.flywheel/projects.tsv` if used).
+- **Run FROM the skill** (`bash <skill>/scripts/… --repo <repo>`): `flywheel-profile.sh` (resolver),
+  `flywheel-kickoff.sh` (generator), `beads-linear-projector` (projector COMPUTE).
 
 ## 11. Documentation
-
-- **`references/setup.md`** — a new "Flywheel Profile" section: the full schema, every field, the
-  detection rules (§5), the scaffolding behavior (§7), and two worked examples (a `solo` repo and
-  a `team` + Linear repo). State the Python ≥3.11 / `tomli` requirement and the preflight check.
+- **`references/setup.md`** — new "Flywheel Profile" section: the flat-shell schema, every field +
+  its Emmanuel default, **absence = Emmanuel defaults**, detection rules (§5), scaffold behavior
+  (§6), `projects.tsv`, and two worked examples (a `solo` repo, a `team`+Linear repo). No Python
+  prereq (bash-native).
 - **`references/cheatsheet.md`** — §3 launch: replace the hand-typed `--init-prompt` block with
-  "generate it: `flywheel-kickoff.sh <session> --plan <path>`"; §4 ship: "the ship bead follows
-  `mode` (solo → commit; team → PR + merge-when-green)."
+  "generate the full launch recipe: `flywheel-kickoff.sh <session> --plan <path>`" (keep the raw
+  `ntm spawn` form below it as a fallback/for understanding); §4 ship: "ship bead follows `mode`."
 
-## 12. Adoption (both repos)
+## 12. Adoption
+- **platform-monorepo:** `.flywheel/profile` `mode=team`, gates per the repo, `FLYWHEEL_PROJECTION_APP=
+  linear` + `.flywheel/projects.tsv` mapping `platform-monorepo-kwf` (and other active epics) → their
+  Linear project ids.
+- **customer-template:** `.flywheel/profile` `mode=team`; projection omitted until a Linear project
+  is chosen.
+- Both committed via the team PR flow.
 
-- **platform-monorepo:** `.flywheel/profile.toml` with `mode="team"`, `[gates]` (light after the
-  hook split), `[issue-projection] app="linear"` mapping the `platform-monorepo-kwf` epic (and any
-  other active epic) → its Linear project id.
-- **customer-template:** `.flywheel/profile.toml` with `mode="team"`; `[issue-projection]`
-  omitted until a Linear project is chosen.
-- Both committed via the normal team flow (PR).
+## 13. Relationship to existing beads (fix #5 — `/p-plan-to-beads` MUST merge, not duplicate)
+- **`skills-ogi.8` (preflight codex/claude auth probe):** unchanged + unaffected (flat-shell needs
+  **no** Python/tomli check). Leave as-is.
+- **`skills-ogi.9` (heavy-pre-commit warn):** **subsumed** by §6 (the `pre_commit` detection + the
+  scaffold warning). Fold into the setup-scaffolding unit; close `.9` as superseded.
+- **`skills-ogi.10` (portable opt-in Linear projection):** **subsumed** by §9 (issue-projection
+  `app=linear`, compute/apply split, `projects.tsv`). The projection units ARE `.10`; continue it,
+  don't create a parallel bead.
 
-## 13. Work decomposition (units → beads)
+## 14. Work decomposition (units → beads)
+| Unit | Owns (files) | Deps | Note |
+|---|---|---|---|
+| **U1 Resolver** | `scripts/flywheel-profile.sh` (+ tests) | — | bash; defaults+parse+pm-detect |
+| **U2 Setup scaffold** | `scripts/flywheel-link.sh` (`scaffold_profile`) | U1 | subsumes `skills-ogi.9` |
+| **U3 Kickoff generator** | `scripts/flywheel-kickoff.sh` (+ tests) | U1 | full launch recipe |
+| **U4 Ship-bead prompt** | `prompts/p-plan-to-beads.md` | U1 | bake mode at encode |
+| **U5 Issue-projection** | `beads-linear-projector` asset + `projects.tsv` read | U1 | = `skills-ogi.10` |
+| **U6 Docs** | `references/setup.md`, `references/cheatsheet.md` | U1–U5 | |
+| **U7 Adopt** | `.flywheel/profile`(+`.tsv`) in platform + customer-template | U2 | manual project ids |
+| **U8 Verify+ship** | broad reality-check + ship bead | U1–U7 | |
+DAG: U1 → {U2,U3,U5}; U4←U1; U6←U1–U5; U7←U2; U8←all. Parallel after U1: U2,U3,U4,U5.
 
-Independent units, disjoint file ownership, explicit deps:
+## 15. Edge cases & failure modes
+No profile → Emmanuel defaults, no error. Non-JS repo → `PM=none`; consumers omit pm commands.
+Unknown/invalid key value → warn-to-stderr + keep default (never silent-wrong, never crash).
+`team` without husky/CI → valid. Projection set but MCP absent / unknown app → log + continue.
+Outside a git repo → defaults + `PM=none`. Partial profile → per-field defaults.
 
-| Unit | Owns (files) | Deps |
-|---|---|---|
-| **U1 Reader + schema** | `scripts/flywheel-profile.py` (+ its tests) | — |
-| **U2 setup scaffolding** | `scripts/flywheel-link.sh` (`scaffold_profile`) | U1 |
-| **U3 Kickoff generator** | `scripts/flywheel-kickoff.sh` (+ tests) | U1 |
-| **U4 Ship-bead prompt** | `prompts/p-plan-to-beads.md` | — |
-| **U5 Issue-projection** | the `beads-linear-projector` skill asset + its profile read | U1 |
-| **U6 Docs** | `references/setup.md`, `references/cheatsheet.md` | U1–U5 |
-| **U7 Adopt in repos** | `.flywheel/profile.toml` in platform + customer-template | U2 |
-| **U8 Verify + ship** | broad reality-check + the ship bead | U1–U7 |
+## 16. Security & correctness
+No secrets in the config. Resolver **parses known keys** (no `source`/eval of repo content).
+Kickoff generator shell-quotes every profile-derived value (one quoted init-prompt arg; no
+injection). Resolver + projector COMPUTE are read-only + network-free. `projects.tsv` holds ids
+only (project ids aren't secret; the tracker token stays in the MCP/env).
 
-DAG: U1 → {U2, U3, U5}; U4 independent; U6 ← U1–U5; U7 ← U2; U8 ← all.
-Parallel after U1: U2, U3, U5, U4 run concurrently (no shared files).
+## 17. Testing strategy
+- **U1:** valid profile parses; absent → Emmanuel defaults; invalid value → warn+default; pm detection
+  for each case; outside-git → defaults; `--repo` honored.
+- **U3:** snapshot — given a profile, the emitted spawn line + controller recipe + readiness note match
+  expected for solo/team × pnpm/bun; quoting holds for values with spaces/quotes.
+- **U4:** the encoded ship bead text reflects `mode` (solo vs team) + detected pm.
+- **U5:** COMPUTE maps epic→project from `projects.tsv` + emits ops; MCP-absent/unknown-app → exit 0 +
+  logged; empty app → no-op.
+- **U7:** both repos' profiles resolve; `flywheel-kickoff.sh` produces a valid recipe for each.
 
-## 14. Edge cases & failure modes
+## 18. Acceptance criteria (per unit)
+- **U1:** `flywheel-profile.sh --repo X` emits correct `FLYWHEEL_*` for present/absent/invalid/partial
+  profiles + every pm case; tests green; no `source` of repo content.
+- **U2:** `fw setup` writes a correct `.flywheel/profile` (scaffold defaults); idempotent; heavy warn fires.
+- **U3:** emits a single-line, correctly-quoted, mode+pm-aware spawn + controller recipe + readiness note.
+- **U4:** freshly-encoded ship bead matches the repo's `mode`; team bead does not block-poll CI.
+- **U5:** COMPUTE produces ops from `projects.tsv`; error-and-continues when the tracker is unavailable;
+  APPLY is documented as the MCP-holder's step.
+- **U6:** setup.md documents schema/defaults/absence=Emmanuel/examples; cheatsheet points at the generator
+  + mode-aware ship; raw spawn kept as fallback.
+- **U7:** both repos carry a valid `.flywheel/profile`, merged via team PR flow.
+- **U8:** repo-wide reality-check clean; green; ship per `mode`.
 
-- No profile → solo defaults, no projection, no error.
-- Non-JS repo (no `package.json`/lockfile) → `package_manager="none"`; consumers omit pm commands.
-- Malformed TOML → reader exits non-zero with a clear error (surfaces the typo; never silent-defaults).
-- Python <3.11 and no `tomli` → reader errors with install guidance; `fw preflight` flags it pre-swarm.
-- `mode="team"` but no husky/CI → valid; team only governs the PR/ship flow.
-- `[issue-projection]` set but tracker not connected/authed → log + continue (no block).
-- Unknown `app` → log + continue.
-- `schema_version` newer than reader supports → warn + best-effort read (forward-compat).
-- Profile present but empty/partial → fill missing fields with the §5 defaults.
+## 19. Rejected alternatives
+- **TOML + a Python reader** (v1) — rejected: the format created a load-bearing Python/parser
+  dependency + version risk; flat shell is bash-native and deletes that whole unit.
+- **`source`-ing the profile** — rejected: executes repo content; the resolver parses known keys instead.
+- **Storing `package_manager`** — rejected: drifts from the real toolchain; detection is deterministic.
+- **A `fw spawn`/`fw doctor` verb** — rejected: `fw` stays `link/setup/list`; the generator is a script
+  the human runs, keeping the human in the loop for the spawn + controller-pane step.
+- **A profile↔repo hard self-check** — rejected (user): `team` without husky is valid; projection errors-and-continues.
+- **Projector applying ops inside the Codex swarm** — rejected: Codex lacks the interactive tracker MCP;
+  apply runs where the MCP is (human/Claude). Compute/apply are split.
+- **`[linear]`** — generalized to `FLYWHEEL_PROJECTION_APP` so other trackers plug in via a simple switch
+  (no plugin framework; only `linear` exists today).
+- **The core loop reading the profile** — rejected: would couple `br`/`bv`/Agent-Mail to team features.
 
-## 15. Security & correctness
-
-- Profile holds **no secrets** (ids + modes only); the Linear token stays in the MCP/env.
-- Reader treats TOML as **data** (no eval/exec).
-- Kickoff generator **shell-quotes** every profile-derived value; the init-prompt is one quoted
-  arg — no command injection from profile contents.
-- Reader is **read-only** + network-free (deterministic, side-effect-free).
-
-## 16. Testing strategy
-
-- **U1 reader:** unit tests — valid profile parses; missing → solo defaults; malformed → non-zero
-  exit; pm detection for each of packageManager/pnpm/bun/npm/yarn/none; mode default with and
-  without `.github/workflows/`; `--env` vs `--json` outputs.
-- **U3 kickoff:** snapshot tests — given a fixed profile, the emitted `ntm spawn` line matches
-  expected for solo vs team, pnpm vs bun; quoting holds for a value containing spaces/quotes.
-- **U4 ship bead:** assert the prompt text branches on `mode` and uses the detected pm.
-- **U5 projection:** app=linear maps epic→project + emits ops; not-connected → error-and-continue
-  (exit 0, logged); unknown app → error-and-continue.
-- **U7 adoption:** both repos' profiles parse; `flywheel-kickoff.sh` produces a valid command for each.
-
-## 17. Acceptance criteria (per unit)
-
-- **U1:** `flywheel-profile.py --json` returns the documented shape for present/absent/malformed
-  profiles; pm detection correct for all cases; tests green.
-- **U2:** `fw setup` on a repo with no profile writes a correct `.flywheel/profile.toml` with
-  detected defaults; idempotent on re-run; heavy-pre-commit warning fires when applicable.
-- **U3:** `flywheel-kickoff.sh` emits a single-line, correctly-quoted, mode+pm-aware `ntm spawn`
-  command + the controller reminder.
-- **U4:** the ship bead in a freshly-encoded plan reflects the repo's `mode`.
-- **U5:** projector reads the profile, projects on close, and error-and-continues when the tracker
-  is unavailable.
-- **U6:** setup.md documents the full schema/detection/examples; cheatsheet points at the generator
-  + mode-aware ship; no stale hand-typed-kickoff instructions remain.
-- **U7:** both repos carry a valid `.flywheel/profile.toml`, merged via their team PR flow.
-- **U8:** repo-wide reality-check clean; everything green; the ship bead lands the work per `mode`.
-
-## 18. Rejected alternatives
-
-- **Storing `package_manager` in the profile** — rejected: drifts from the real toolchain; detection
-  is deterministic and always correct.
-- **A `fw spawn` / `fw doctor` verb** — rejected: keeps `fw` to `link/setup/list`; the kickoff
-  generator is a script the human runs, and the human stays in the loop for the actual spawn +
-  controller-pane step.
-- **A hard profile↔repo self-check** (runner-up 3) — rejected by the user: `mode="team"` without
-  husky is legitimate; an unconnected projection just errors-and-continues.
-- **Bash TOML parsing** — rejected: fragile on tables/quoting; Python `tomllib` is correct + simple.
-- **`[linear]` block** — renamed to generic `[issue-projection]` with `app="linear"` so other
-  trackers can plug in later without a schema change.
-- **The core loop reading the profile** — rejected: would couple `br`/`bv`/Agent-Mail to team
-  features; the profile is read only at the edges.
-
-## 19. Assumptions (check these)
-
-- Python 3.11+ (or `tomli`) is available on dev machines running the flywheel; `fw preflight`
-  will verify and surface it.
-- `jq` is available for the kickoff generator to read the reader's JSON (already a flywheel
-  niceties dependency; if not, the generator uses `--env` instead).
-- The Linear projector asset from `skills-ogi.10` exists (or is built in parallel) to satisfy U5.
-- Repos are git repos with a remote when `mode` defaults to `team`.
-- The profile is committed (it is per-repo config, not local-only).
+## 20. Assumptions (check)
+- `bash` + coreutils + `git` are present (already flywheel prerequisites). No Python needed.
+- The Linear projector asset from `skills-ogi.10` exists/continues to satisfy U5's COMPUTE.
+- Repos are git repos with a remote when `mode` scaffolds to `team`.
+- The profile is committed (per-repo config, not local-only).
+- Mapping a new epic→project in `projects.tsv` is **manual** (the user creates the Linear project +
+  pastes its id) — stated in setup.md "what stays manual."
