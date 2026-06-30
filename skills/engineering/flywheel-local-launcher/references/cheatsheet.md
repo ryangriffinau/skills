@@ -46,6 +46,8 @@ Each agent loops: `bv` → reserve files via Agent Mail → `cass pack` → impl
 
 ## 3. Launch & monitor the swarm
 
+**Before you spawn:** ensure Codex *and* Claude are current + logged in. A stale Codex **self-updates on first launch** ("Please restart Codex"), drops every pane to the shell, and your `--init-prompt` then gets typed into zsh. Quick check: `echo ok | codex exec` returns text, and `claude` is logged in.
+
 ```bash
 # Paste as ONE line (blank lines between \ continuations drop the flags).
 ntm spawn <name> --cod=2 --assign --strategy=dependency --cass-context "<area>" \
@@ -53,9 +55,14 @@ ntm spawn <name> --cod=2 --assign --strategy=dependency --cass-context "<area>" 
 ntm controller <name>     # adds a Claude coordinator/reviewer in pane 1
 ```
 
-**⚠ Two things that bit us — check them every run:**
-- **Continuous assignment:** `--assign` is *one-shot*. With `[coordinator] auto_assign = true` set (setup.md §A.3) the swarm keeps pulling ready beads; otherwise it **stalls after the first wave** — re-feed with `ntm send <name> "loop: claim the next ready bead with bv and repeat"`.
-- **The CC controller actually running:** after `ntm controller <name>`, **go to pane 1 and confirm Claude started** — it often parks at Claude Code's *"bypass permissions"* welcome screen. Select **"Yes, I accept"** (don't Ctrl-C). If it's idle/erroring, it isn't reviewing. (The coordinator *service* handles assignment; the controller *agent* handles review — different jobs.)
+**⚠ Things that bite at launch — check every run:**
+- **Agents `0/N ready` at spawn** (Codex/Claude boot slowly, or Codex just auto-updated → panes fell to the shell): ntm sends the init-prompt + assignment to **0 agents**. If a pane shows the shell after a Codex self-update, `ntm respawn <name> --type=cod --force` (or kill + re-spawn) first; then once the panes are in their agent TUI, re-feed: `ntm send <name> --cod "<kickoff>"` and `ntm coordinator assign <name>`.
+- **Continuous assignment:** `--assign` is *one-shot*. With `[coordinator] auto_assign = true` (setup.md §A.3) the coordinator keeps feeding ready beads; otherwise it **stalls after the first wave**. Workers also self-claim via `br ready` if the kickoff says to — `Idle Agents: 0` usually means they're busy, not stuck.
+- **The CC controller is the flakiest piece:**
+  - Confirm it's **logged in** — a spawned Claude often 401s (`Invalid authentication credentials · Please run /login`). Run `/login` in its pane.
+  - It can **park at the "bypass permissions" welcome screen** — focus the pane and accept (don't Ctrl-C).
+  - **Feed its coordinator brief with `tmux send-keys`, NOT `ntm send`.** `ntm send` / `--cc` pastes into a Claude pane as `[Image #1]` and is lost. Type it straight in: `tmux send-keys -t <name>:0.<pane> "<brief>"` then `tmux send-keys -t <name>:0.<pane> Enter` (a 2nd Enter may be needed to submit); `tmux list-panes -t <name>` shows pane indices. Or just click into the pane and type.
+  - Brief it to **coordinate + review only** (don't claim beads) and to **approve workers' Agent Mail contact requests**.
 
 **Monitor:**
 ```bash
@@ -69,7 +76,7 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 
 > Agents run fully autonomous (`--dangerously-*`). The guardrails are **DCG + Agent Mail leases + a feature branch (never `main`)** — that's what replaces worktree isolation. **Stash unrelated/dirty files before spawning** — a mixed tree makes agents hesitant to commit.
 
-**Tear down a finished run:** `ntm kill <name>` (stops the controller + workers), then `ntm cleanup` (clears stale temp files). Held file leases are advisory and expire when agents exit — no manual release. Don't leave a finished swarm running: idle Codex panes burn tokens and its stale locks + accumulated identities clutter the next run. `ntm list` shows what's still live.
+**Tear down a finished run:** `ntm kill <name> --force` (stops the controller + workers; prompts for confirmation without `--force`), then `ntm cleanup` (clears stale temp files). Held file leases are advisory and expire when agents exit — no manual release. Don't leave a finished swarm running: idle Codex panes burn tokens and its stale locks + accumulated identities clutter the next run. `ntm list` shows what's still live.
 
 ---
 
