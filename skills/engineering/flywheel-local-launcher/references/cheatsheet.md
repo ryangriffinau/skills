@@ -83,7 +83,7 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 ## 4. Shipping
 
 - **Commit + push per bead, immediately.** Each agent commits its own small change and pushes the moment a bead closes (unpushed = invisible to other agents; piling up changes creates the "mixed tree" that stalls commits). The lease guard checks reservations on commit.
-- **PR + cleanup:** `gh pr create`, then **`/pr-closeout`**.
+- **PR (team practice — always):** end every swarm with a **ship bead** that opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). Then **`/pr-closeout`**. *(Emmanuel is solo-on-main; PRs are **additive** to the flywheel — beads/Agent-Mail/branches are orthogonal to where you merge — not a deviation.)*
 - **Verify:** **`/p-deploy-and-verify`**.
 - **Close the loop:** `br changelog` → close the Linear issue. `ntm handoff create <name> --auto` for cross-session continuity.
 

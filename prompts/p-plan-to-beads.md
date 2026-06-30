@@ -9,6 +9,10 @@ Take ALL of the plan below and, where it helps, elaborate on it further, then cr
 
 Use ONLY the `br` CLI to create and modify the beads — create the epics/tasks/subtasks, set the dependencies between them, and attach the detailed comments all through `br`. Do not write pseudo-beads as markdown or invent a parallel task format. When you are finished, summarise the epic/task/subtask structure and the dependency graph you created so it can be reviewed.
 
+**Always close the graph with two final beads, each depending on all implementation leaves:**
+1. A **broad reality-check** bead — not a scope-limited verify. It must: get build/typecheck/test green; run a **repo-wide** `grep -ri` for ANY stale/orphaned reference (not just the directories this plan touched); do a `/p-fresh-eyes-review` of the whole diff; and run `/p-reality-check` that the intended outcome actually exists with no residual artifacts. This catches out-of-scope leftovers (stale docs/ADRs, half-renamed references) that per-bead reviews miss because each only sees its own scope.
+2. A **ship** bead — open the PR ready for review (so CI + the preview env run), then merge when green: directly for safe / non-prod / template changes, otherwise with user approval.
+
 Input:
 
 $ARGUMENTS
