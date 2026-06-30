@@ -49,7 +49,15 @@ Each agent loops: `bv` → reserve files via Agent Mail → `cass pack` → impl
 **Before you spawn:** ensure Codex *and* Claude are current + logged in. A stale Codex **self-updates on first launch** ("Please restart Codex"), drops every pane to the shell, and your `--init-prompt` then gets typed into zsh. Quick check: `echo ok | codex exec` returns text, and `claude` is logged in.
 
 ```bash
-# Paste as ONE line (blank lines between \ continuations drop the flags).
+# Generate the full, profile-aware launch recipe.
+bash <skill>/scripts/flywheel-kickoff.sh <name> --plan docs/specs/<x>/plan.md --cod 2 --cass "<area>"
+```
+
+Run the printed `ntm spawn ...` line, then run the printed controller step. The generator reads `.flywheel/profile` once and bakes in the repo mode, detected package manager, one-shared-tree rule, controller `tmux send-keys` command, and 0/N-ready recovery note.
+
+Raw fallback form, useful for understanding or if the generator is unavailable:
+```bash
+# Paste as ONE line (blank lines between continuations drop the flags).
 ntm spawn <name> --cod=2 --assign --strategy=dependency --cass-context "<area>" \
   --init-prompt "Follow AGENTS.md. Run /p-deep-project-primer first. Plan: docs/specs/<x>/plan.md. Loop: bv → reserve files via Agent Mail → cass pack --robot \"<topic>\" → implement + test → ubs --staged --fail-on-warning → fresh-eyes review → br close → commit AND push immediately. Then claim the NEXT ready bead and repeat until bv is empty. ONE shared tree, NEVER worktrees. Commits: lowercase subject + valid scope; docs/specs needs frontmatter."
 ntm controller <name>     # adds a Claude coordinator/reviewer in pane 1
@@ -86,7 +94,7 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 ## 4. Shipping
 
 - **Commit + push per bead, immediately.** Each agent commits its own small change and pushes the moment a bead closes (unpushed = invisible to other agents; piling up changes creates the "mixed tree" that stalls commits). The lease guard checks reservations on commit.
-- **PR (team practice — always):** end every swarm with a **ship bead** that opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). Then **`/pr-closeout`**. *(Emmanuel is solo-on-main; PRs are **additive** to the flywheel — beads/Agent-Mail/branches are orthogonal to where you merge — not a deviation.)*
+- **Ship bead follows `.flywheel/profile` mode:** `solo` commits and pushes to the working branch with no PR. `team` opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). The agent should not block-poll CI; it opens ready, enables auto-merge when available, and lets CI/the human complete. Then **`/pr-closeout`**.
 - **Verify:** **`/p-deploy-and-verify`**.
 - **Close the loop:** `br changelog` → close the Linear issue. `ntm handoff create <name> --auto` for cross-session continuity.
 

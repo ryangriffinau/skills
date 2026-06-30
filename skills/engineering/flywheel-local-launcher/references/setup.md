@@ -72,6 +72,54 @@ Do **not** `--force` — that clobbers husky's runner and your lint-staged / typ
 
 Now the Agent Mail lease guard runs **alongside** the repo's own checks. The guard is repo-agnostic (machine-wide Agent Mail + `git rev-parse`). One-off bypass: `AGENT_MAIL_BYPASS=1 git commit …`; advisory mode: `AGENT_MAIL_GUARD_MODE=warn`. Non-husky repos fall back to plain `ntm guards install`.
 
+### Flywheel Profile
+
+`setup` also scaffolds an optional `.flywheel/profile`: a flat, shell-looking config file that describes repo-specific flywheel behavior. It is parsed by the skill scripts, not sourced. No secrets belong in it.
+
+The profile tooling is bash-native. It adds no Python, TOML, or `jq` prerequisite.
+
+Absence is valid and means Emmanuel defaults:
+
+| Field | Values | Default when absent |
+|---|---|---|
+| `FLYWHEEL_MODE` | `solo`, `team` | `solo` |
+| `FLYWHEEL_WORKTREES` | `false` | `false` |
+| `FLYWHEEL_PRECOMMIT` | `light`, `heavy` | `light` |
+| `FLYWHEEL_PREPUSH` | `full`, `none` | `full` |
+| `FLYWHEEL_PROJECTION_APP` | empty, `linear` | empty |
+
+Package manager is detected, not stored: `package.json` `packageManager` wins; otherwise lockfiles are checked in this order: `pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`, `yarn.lock`; otherwise `none`.
+
+`setup` is idempotent:
+- if `.flywheel/profile` already exists, it prints the resolved summary and does not overwrite it;
+- otherwise it writes a scaffold profile with `FLYWHEEL_MODE=team` only when the repo has a remote and `.github/workflows/`; `solo` otherwise;
+- `FLYWHEEL_PRECOMMIT=heavy` only when `.husky/pre-commit` mentions `typecheck`, `build`, or `test`; if so, setup prints a warning suggesting fast pre-commit and heavier pre-push/CI gates;
+- `FLYWHEEL_PROJECTION_APP=` is left empty, with comments showing how to opt into Linear.
+
+Example solo repo:
+```sh
+FLYWHEEL_MODE=solo
+FLYWHEEL_WORKTREES=false
+FLYWHEEL_PRECOMMIT=light
+FLYWHEEL_PREPUSH=full
+FLYWHEEL_PROJECTION_APP=
+```
+
+Example team repo with Linear projection:
+```sh
+FLYWHEEL_MODE=team
+FLYWHEEL_WORKTREES=false
+FLYWHEEL_PRECOMMIT=light
+FLYWHEEL_PREPUSH=full
+FLYWHEEL_PROJECTION_APP=linear
+```
+
+When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv`:
+```text
+platform-monorepo-kwf	lin_prj_AbC123
+```
+This is the manual epic-to-project map: create or choose the Linear project yourself, paste its project id here, and commit the mapping. The projector computes JSON operations from Beads plus this TSV, but applying them is done later by a human or controller session with the Linear MCP.
+
 ## C. The projects model + the one-path rule
 
 NTM resolves a session to **`projects_base/<flat-name>`** (one level deep, flat name), and that path is **also the Agent Mail project key**. Real repos are nested (`Code/github/<org>/<repo>`), so each is exposed as a **flat symlink** directly under `projects_base`.
