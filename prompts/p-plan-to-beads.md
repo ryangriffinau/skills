@@ -9,9 +9,20 @@ Take ALL of the plan below and, where it helps, elaborate on it further, then cr
 
 Use ONLY the `br` CLI to create and modify the beads — create the epics/tasks/subtasks, set the dependencies between them, and attach the detailed comments all through `br`. Do not write pseudo-beads as markdown or invent a parallel task format. When you are finished, summarise the epic/task/subtask structure and the dependency graph you created so it can be reviewed.
 
+Before creating the final ship bead, resolve this repo's Flywheel Profile exactly once at encode time:
+
+```bash
+eval "$(skills/engineering/flywheel-local-launcher/scripts/flywheel-profile.sh --repo .)"
+```
+
+If the resolver is absent or fails, use the Emmanuel default for the final ship bead: `FLYWHEEL_MODE=solo` and `FLYWHEEL_PM=none`. Use the resolved `FLYWHEEL_MODE` and `FLYWHEEL_PM` to write complete, self-contained shipping instructions into the ship bead. Do not tell the future ship-bead agent to read `.flywheel/profile`; the mode-specific behavior must already be baked into the bead text.
+
 **Always close the graph with two final beads, each depending on all implementation leaves:**
 1. A **broad reality-check** bead — not a scope-limited verify. It must: get build/typecheck/test green; run a **repo-wide** `grep -ri` for ANY stale/orphaned reference (not just the directories this plan touched); do a `/p-fresh-eyes-review` of the whole diff; and run `/p-reality-check` that the intended outcome actually exists with no residual artifacts. This catches out-of-scope leftovers (stale docs/ADRs, half-renamed references) that per-bead reviews miss because each only sees its own scope.
-2. A **ship** bead — open the PR ready for review (so CI + the preview env run), then merge when green: directly for safe / non-prod / template changes, otherwise with user approval.
+2. A **ship** bead — mode-aware, based on the encode-time resolver output:
+   - If `FLYWHEEL_MODE=solo`: write the bead to verify with the detected package manager where applicable, commit and push to the working branch, and explicitly say **no PR**.
+   - If `FLYWHEEL_MODE=team`: write the bead to verify with the detected package manager where applicable, open the PR **ready** so CI and the preview environment run, enable auto-merge if the repo supports it, and merge when green: directly for safe / non-prod / template changes, otherwise with user approval. Explicitly say the agent must **not block-poll CI**; it should open the PR ready and let CI or the human complete if checks are still running.
+   - If no profile exists, this is `solo`.
 
 Input:
 

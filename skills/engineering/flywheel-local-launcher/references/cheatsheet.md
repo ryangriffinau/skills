@@ -49,16 +49,25 @@ Each agent loops: `bv` → reserve files via Agent Mail → `cass pack` → impl
 **Before you spawn:** ensure Codex *and* Claude are current + logged in. A stale Codex **self-updates on first launch** ("Please restart Codex"), drops every pane to the shell, and your `--init-prompt` then gets typed into zsh. Quick check: `echo ok | codex exec` returns text, and `claude` is logged in.
 
 ```bash
-# Paste as ONE line (blank lines between \ continuations drop the flags).
+# Generate the full, profile-aware launch recipe.
+bash <skill>/scripts/flywheel-kickoff.sh <name> --plan docs/specs/<x>/plan.md --cod 2 --cass "<area>"
+```
+
+Run the printed `ntm spawn ...` line with the Claude supervisor included from the start (`--cc=1`, or a cc-inclusive recipe such as `review-team` / `balanced`). The generator reads `.flywheel/profile` once and bakes in the repo mode, detected package manager, one-shared-tree rule, controller brief, and 0/N-ready recovery note.
+
+Raw fallback form, useful for understanding or if the generator is unavailable:
+```bash
+# Paste as ONE line (blank lines between continuations drop the flags).
 ntm spawn <name> --cod=2 --assign --strategy=dependency --cass-context "<area>" \
+  --cc=1 \
   --init-prompt "Follow AGENTS.md. Run /p-deep-project-primer first. Plan: docs/specs/<x>/plan.md. Loop: bv → reserve files via Agent Mail → cass pack --robot \"<topic>\" → implement + test → ubs --staged --fail-on-warning → fresh-eyes review → br close → commit AND push immediately. Then claim the NEXT ready bead and repeat until bv is empty. ONE shared tree, NEVER worktrees. Commits: lowercase subject + valid scope; docs/specs needs frontmatter."
-ntm controller <name>     # adds a Claude coordinator/reviewer in pane 1
 ```
 
 **⚠ Things that bite at launch — check every run:**
 - **Agents `0/N ready` at spawn** (Codex/Claude boot slowly, or Codex just auto-updated → panes fell to the shell): ntm sends the init-prompt + assignment to **0 agents**. If a pane shows the shell after a Codex self-update, `ntm respawn <name> --type=cod --force` (or kill + re-spawn) first; then once the panes are in their agent TUI, re-feed: `ntm send <name> --cod "<kickoff>"` and `ntm coordinator assign <name>`.
 - **Continuous assignment:** `--assign` is *one-shot*. With `[coordinator] auto_assign = true` (setup.md §A.3) the coordinator keeps feeding ready beads; otherwise it **stalls after the first wave**. Workers also self-claim via `br ready` if the kickoff says to — `Idle Agents: 0` usually means they're busy, not stuck.
-- **The CC controller is the flakiest piece:**
+- **Spawn the Claude supervisor from the start.** Reliable path: `ntm spawn <name> --cc=1 --cod=N ...` (or a cc-inclusive recipe such as `review-team` / `balanced`). This gives Claude its own fresh pane. `ntm controller <name>` retrofits Claude into an already-running session and is unreliable when pane 1 is a busy Codex worker; use it only as a last-resort manual recovery path.
+- **The CC supervisor still needs attention:**
   - Confirm it's **logged in** — a spawned Claude often 401s (`Invalid authentication credentials · Please run /login`). Run `/login` in its pane.
   - It can **park at the "bypass permissions" welcome screen** — focus the pane and accept (don't Ctrl-C).
   - **Feed its coordinator brief with `tmux send-keys`, NOT `ntm send`.** `ntm send` / `--cc` pastes into a Claude pane as `[Image #1]` and is lost. Type it straight in: `tmux send-keys -t <name>:0.<pane> "<brief>"` then `tmux send-keys -t <name>:0.<pane> Enter` (a 2nd Enter may be needed to submit); `tmux list-panes -t <name>` shows pane indices. Or just click into the pane and type.
@@ -86,7 +95,7 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 ## 4. Shipping
 
 - **Commit + push per bead, immediately.** Each agent commits its own small change and pushes the moment a bead closes (unpushed = invisible to other agents; piling up changes creates the "mixed tree" that stalls commits). The lease guard checks reservations on commit.
-- **PR (team practice — always):** end every swarm with a **ship bead** that opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). Then **`/pr-closeout`**. *(Emmanuel is solo-on-main; PRs are **additive** to the flywheel — beads/Agent-Mail/branches are orthogonal to where you merge — not a deviation.)*
+- **Ship bead follows `.flywheel/profile` mode:** `solo` commits and pushes to the working branch with no PR. `team` opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). The agent should not block-poll CI; it opens ready, enables auto-merge when available, and lets CI/the human complete. Then **`/pr-closeout`**.
 - **Verify:** **`/p-deploy-and-verify`**.
 - **Close the loop:** `br changelog` → close the Linear issue. `ntm handoff create <name> --auto` for cross-session continuity.
 
@@ -109,6 +118,6 @@ No built-in guard stops `git worktree add` (DCG allows it). Enforce by: **never*
 | Stress-test | `/p-reality-check`, `/p-pre-mortem` |
 | Plan → beads | `/p-plan-to-beads` |
 | Onboard agents to a repo | `/p-deep-project-primer` |
-| Launch swarm | `/p-agent-swarm-launcher`, `ntm spawn` + `ntm controller` (§3) |
+| Launch swarm | `/p-agent-swarm-launcher`, `ntm spawn --cc=1 ...` (§3) |
 | Per-bead quality | `ubs --staged --fail-on-warning`, `/p-fresh-eyes-review` |
 | Ship | `/commit`, `/commit-whole-diff`, `/pr-closeout`, `/p-deploy-and-verify` |
