@@ -28,6 +28,11 @@ assert_output_contains() {
   grep -Fq "$needle" "$file" || fail "$label: expected output to contain $needle"
 }
 
+assert_file_executable() {
+  local file="$1" label="$2"
+  [ -x "$file" ] || fail "$label: expected $file to be executable"
+}
+
 install_stubs() {
   local bin_dir="$TMP_ROOT/bin"
   mkdir -p "$bin_dir" "$TMP_ROOT/projects"
@@ -84,6 +89,9 @@ SH
 run_setup "$repo"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_MODE=solo" "solo scaffold mode"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PRECOMMIT=heavy" "heavy scaffold precommit"
+assert_file_contains "$repo/.husky/pre-commit" "scripts/ci/file-reservation-guard.sh" "husky hook guard"
+assert_file_contains "$repo/.husky/pre-commit" "npm test" "husky hook preserves body"
+assert_file_executable "$repo/scripts/ci/file-reservation-guard.sh" "husky copied guard"
 assert_output_contains "$SETUP_OUT" ".husky/pre-commit looks heavy" "heavy warning"
 assert_output_contains "$SETUP_OUT" ".flywheel/profile (mode=solo, pm=none, pre_commit=heavy)" "heavy summary"
 
@@ -98,5 +106,17 @@ run_setup "$repo"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_MODE=team" "existing profile preserved"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PRECOMMIT=light" "existing precommit preserved"
 assert_output_contains "$SETUP_OUT" ".flywheel/profile (mode=team, pm=none, pre_commit=light)" "existing summary"
+
+repo="$(new_repo git_hook_repo)"
+cat > "$repo/.git/hooks/pre-commit" <<'SH'
+#!/usr/bin/env bash
+br sync --flush-only
+SH
+chmod +x "$repo/.git/hooks/pre-commit"
+run_setup "$repo"
+assert_file_contains "$repo/.git/hooks/pre-commit" "scripts/ci/file-reservation-guard.sh" "git hook guard"
+assert_file_contains "$repo/.git/hooks/pre-commit" "br sync --flush-only" "git hook preserves body"
+assert_file_executable "$repo/scripts/ci/file-reservation-guard.sh" "git hook copied guard"
+assert_output_contains "$SETUP_OUT" "lease guard chained into existing git hook (after shebang)" "git hook summary"
 
 echo "ok - flywheel-link setup scaffold"

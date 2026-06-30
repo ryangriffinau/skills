@@ -246,24 +246,48 @@ PROFILE
   print_profile_summary
 }
 
+copy_guard_script() {
+  mkdir -p scripts/ci
+  cp "$SCRIPT_DIR/file-reservation-guard.sh" scripts/ci/file-reservation-guard.sh
+  chmod +x scripts/ci/file-reservation-guard.sh
+}
+
+chain_guard_into_hook() {
+  local hook="$1" label="$2" tmp
+  copy_guard_script
+  if grep -q 'file-reservation-guard.sh' "$hook"; then
+    echo "  ✓ lease guard already chained in $hook"
+  elif head -1 "$hook" | grep -q '^#!'; then
+    tmp="$(mktemp "${hook}.XXXXXX")"
+    {
+      head -1 "$hook"
+      printf '%s\n' 'scripts/ci/file-reservation-guard.sh'
+      tail -n +2 "$hook"
+    } > "$tmp"
+    mv "$tmp" "$hook"
+    chmod +x "$hook"
+    echo "  ✓ lease guard chained into $label (after shebang)"
+  else
+    tmp="$(mktemp "${hook}.XXXXXX")"
+    {
+      printf '%s\n' 'scripts/ci/file-reservation-guard.sh'
+      cat "$hook"
+    } > "$tmp"
+    mv "$tmp" "$hook"
+    chmod +x "$hook"
+    echo "  ✓ lease guard chained into $label"
+  fi
+}
+
 install_guard() {
   # `ntm guards install` wants to OWN the pre-commit hook and fails when husky already has one
   # (it targets .husky/_/pre-commit). On a husky repo, chain the portable lease guard from the
   # existing hook instead, so the guard and the repo's own checks both run. See setup.md.
-  local hook=.husky/pre-commit
+  local hook=.husky/pre-commit git_hook=.git/hooks/pre-commit
   if [ -f "$hook" ]; then
-    mkdir -p scripts/ci
-    cp "$SCRIPT_DIR/file-reservation-guard.sh" scripts/ci/file-reservation-guard.sh
-    chmod +x scripts/ci/file-reservation-guard.sh
-    if grep -q 'file-reservation-guard.sh' "$hook"; then
-      echo "  ✓ lease guard already chained in $hook"
-    elif head -1 "$hook" | grep -q '^#!'; then
-      printf '%s\nscripts/ci/file-reservation-guard.sh\n%s\n' "$(head -1 "$hook")" "$(tail -n +2 "$hook")" > "$hook"
-      echo "  ✓ lease guard chained into existing husky hook (after shebang)"
-    else
-      printf 'scripts/ci/file-reservation-guard.sh\n%s\n' "$(cat "$hook")" > "$hook"
-      echo "  ✓ lease guard chained into existing husky hook"
-    fi
+    chain_guard_into_hook "$hook" "existing husky hook"
+  elif [ -f "$git_hook" ]; then
+    chain_guard_into_hook "$git_hook" "existing git hook"
   else
     ntm guards install || echo "  (ntm guards install skipped/failed)"
   fi
