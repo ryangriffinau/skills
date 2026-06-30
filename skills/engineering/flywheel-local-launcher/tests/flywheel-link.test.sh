@@ -33,6 +33,11 @@ assert_file_executable() {
   [ -x "$file" ] || fail "$label: expected $file to be executable"
 }
 
+assert_file_not_exists() {
+  local file="$1" label="$2"
+  [ ! -e "$file" ] || fail "$label: expected $file to be absent"
+}
+
 install_stubs() {
   local bin_dir="$TMP_ROOT/bin"
   mkdir -p "$bin_dir" "$TMP_ROOT/projects"
@@ -89,7 +94,7 @@ SH
 run_setup "$repo"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_MODE=solo" "solo scaffold mode"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PRECOMMIT=heavy" "heavy scaffold precommit"
-assert_file_contains "$repo/.husky/pre-commit" "scripts/ci/file-reservation-guard.sh" "husky hook guard"
+assert_file_contains "$repo/.husky/pre-commit" 'scripts/ci/file-reservation-guard.sh || exit $?' "husky hook guard"
 assert_file_contains "$repo/.husky/pre-commit" "npm test" "husky hook preserves body"
 assert_file_executable "$repo/scripts/ci/file-reservation-guard.sh" "husky copied guard"
 assert_output_contains "$SETUP_OUT" ".husky/pre-commit looks heavy" "heavy warning"
@@ -110,13 +115,36 @@ assert_output_contains "$SETUP_OUT" ".flywheel/profile (mode=team, pm=none, pre_
 repo="$(new_repo git_hook_repo)"
 cat > "$repo/.git/hooks/pre-commit" <<'SH'
 #!/usr/bin/env bash
-br sync --flush-only
+touch hook-continued
 SH
 chmod +x "$repo/.git/hooks/pre-commit"
 run_setup "$repo"
-assert_file_contains "$repo/.git/hooks/pre-commit" "scripts/ci/file-reservation-guard.sh" "git hook guard"
-assert_file_contains "$repo/.git/hooks/pre-commit" "br sync --flush-only" "git hook preserves body"
+assert_file_contains "$repo/.git/hooks/pre-commit" 'scripts/ci/file-reservation-guard.sh || exit $?' "git hook guard"
+assert_file_contains "$repo/.git/hooks/pre-commit" "touch hook-continued" "git hook preserves body"
 assert_file_executable "$repo/scripts/ci/file-reservation-guard.sh" "git hook copied guard"
 assert_output_contains "$SETUP_OUT" "lease guard chained into existing git hook (after shebang)" "git hook summary"
+cat > "$repo/scripts/ci/file-reservation-guard.sh" <<'SH'
+#!/usr/bin/env bash
+exit 42
+SH
+chmod +x "$repo/scripts/ci/file-reservation-guard.sh"
+set +e
+(cd "$repo" && bash .git/hooks/pre-commit)
+hook_status="$?"
+set -e
+[ "$hook_status" -ne 0 ] || fail "git hook fail closed: expected nonzero exit"
+assert_file_not_exists "$repo/hook-continued" "git hook fail closed"
+
+repo="$(new_repo legacy_hook_repo)"
+cat > "$repo/.git/hooks/pre-commit" <<'SH'
+#!/usr/bin/env bash
+scripts/ci/file-reservation-guard.sh
+touch legacy-continued
+SH
+chmod +x "$repo/.git/hooks/pre-commit"
+run_setup "$repo"
+assert_file_contains "$repo/.git/hooks/pre-commit" 'scripts/ci/file-reservation-guard.sh || exit $?' "legacy git hook guard upgraded"
+assert_file_contains "$repo/.git/hooks/pre-commit" "touch legacy-continued" "legacy git hook preserves body"
+assert_output_contains "$SETUP_OUT" "lease guard updated to fail closed in .git/hooks/pre-commit" "legacy git hook summary"
 
 echo "ok - flywheel-link setup scaffold"

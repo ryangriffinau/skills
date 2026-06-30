@@ -252,16 +252,33 @@ copy_guard_script() {
   chmod +x scripts/ci/file-reservation-guard.sh
 }
 
+guard_hook_line() {
+  printf '%s\n' 'scripts/ci/file-reservation-guard.sh || exit $?'
+}
+
 chain_guard_into_hook() {
-  local hook="$1" label="$2" tmp
+  local hook="$1" label="$2" tmp guard_line
+  guard_line="$(guard_hook_line)"
   copy_guard_script
-  if grep -q 'file-reservation-guard.sh' "$hook"; then
+  if grep -Fqx "$guard_line" "$hook"; then
     echo "  ✓ lease guard already chained in $hook"
+  elif grep -Eq '^[[:space:]]*scripts/ci/file-reservation-guard\.sh[[:space:]]*$' "$hook"; then
+    tmp="$(mktemp "${hook}.XXXXXX")"
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [[ "$line" =~ ^[[:space:]]*scripts/ci/file-reservation-guard\.sh[[:space:]]*$ ]]; then
+        printf '%s\n' "$guard_line"
+      else
+        printf '%s\n' "$line"
+      fi
+    done < "$hook" > "$tmp"
+    mv "$tmp" "$hook"
+    chmod +x "$hook"
+    echo "  ✓ lease guard updated to fail closed in $hook"
   elif head -1 "$hook" | grep -q '^#!'; then
     tmp="$(mktemp "${hook}.XXXXXX")"
     {
       head -1 "$hook"
-      printf '%s\n' 'scripts/ci/file-reservation-guard.sh'
+      printf '%s\n' "$guard_line"
       tail -n +2 "$hook"
     } > "$tmp"
     mv "$tmp" "$hook"
@@ -270,7 +287,7 @@ chain_guard_into_hook() {
   else
     tmp="$(mktemp "${hook}.XXXXXX")"
     {
-      printf '%s\n' 'scripts/ci/file-reservation-guard.sh'
+      printf '%s\n' "$guard_line"
       cat "$hook"
     } > "$tmp"
     mv "$tmp" "$hook"
