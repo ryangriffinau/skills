@@ -76,7 +76,10 @@ Steer: `ntm send <name> --cod "<correction>"`. DCG vetoes destructive commands; 
 
 > Agents run fully autonomous (`--dangerously-*`). The guardrails are **DCG + Agent Mail leases + a feature branch (never `main`)** — that's what replaces worktree isolation. **Stash unrelated/dirty files before spawning** — a mixed tree makes agents hesitant to commit.
 
-**Tear down a finished run:** `ntm kill <name> --force` (stops the controller + workers; prompts for confirmation without `--force`), then `ntm cleanup` (clears stale temp files). Held file leases are advisory and expire when agents exit — no manual release. Don't leave a finished swarm running: idle Codex panes burn tokens and its stale locks + accumulated identities clutter the next run. `ntm list` shows what's still live.
+**Teardown (after the run):**
+- **Stop the swarm:** `ntm kill <name> --force` (stops controller + workers; prompts without `--force`), then `ntm cleanup` (clears stale temp files). Don't leave a finished swarm running — idle Codex panes burn tokens, and stale locks + accumulated identities clutter the next run. `ntm list` shows what's still live.
+- **Leases + identities are disposable** — file leases are advisory and expire when agents exit (no manual release); the whimsical agent identities accumulate harmlessly.
+- **Get your local back to a clean `main`** once the PR has merged: stash any runtime stragglers (`.ntm/rate_limits.json`, etc.) with `git stash` (reversible), then `git checkout main && git pull`. The feature branch's commits are already in the squash-merge.
 
 ---
 
