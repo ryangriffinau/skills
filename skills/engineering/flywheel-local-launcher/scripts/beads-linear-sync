@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# beads-linear-sync — apply the Beads -> Linear PROJECT-LEVEL projection, idempotently, via the
+# Linear GraphQL API. Project-level ONLY: it never mirrors child beads to Linear issues (per the
+# flywheel model — Linear is a human roadmap view, not a bead-by-bead clone).
+#
+# Reads .flywheel/profile (must have FLYWHEEL_PROJECTION_APP=linear) + .flywheel/projects.tsv
+# (epic-id <TAB> linear-project-id) + .beads/issues.jsonl. For each mapped epic it computes
+# closed/total children -> progress %, and posts a Linear project status update WITH that progress
+# — but only when the % changed since the last sync (idempotent; safe to run repeatedly / on a hook).
+#
+#   Usage:  beads-linear-sync --repo DIR [--dry-run]
+#   Auth:   export LINEAR_API_KEY=<Linear personal API key>   (Linear -> Settings -> API)
+#           Any team member can create one; no Claude/MCP session needed.
+#   Fail-open: if LINEAR_API_KEY is unset or the API errors, it logs and CONTINUES (never blocks a loop).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LINEAR_GRAPHQL="https://api.linear.app/graphql"
+
+repo="."; dry_run=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo) [ "$#" -ge 2 ] || { echo "usage: beads-linear-sync --repo DIR [--dry-run]" >&2; exit 2; }; repo="$2"; shift 2 ;;
+    --dry-run) dry_run=1; shift ;;
+    -h|--help) echo "usage: beads-linear-sync --repo DIR [--dry-run]"; exit 0 ;;
+    *) echo "beads-linear-sync: unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+repo_abs="$(cd "$repo" 2>/dev/null && pwd)" || { echo "beads-linear-sync: repo not found: $repo" >&2; exit 2; }
+projects_tsv="$repo_abs/.flywheel/projects.tsv"
+issues_jsonl="$repo_abs/.beads/issues.jsonl"
+
+# --- profile gate (fail-open) ---
+eval "$("$SCRIPT_DIR/flywheel-profile.sh" --repo "$repo_abs" 2>/dev/null)" || true
+if [ "${FLYWHEEL_PROJECTION_APP:-}" != "linear" ]; then
+  echo "beads-linear-sync: FLYWHEEL_PROJECTION_APP is not 'linear' (='${FLYWHEEL_PROJECTION_APP:-}'); nothing to do" >&2; exit 0
+fi
+[ -f "$projects_tsv" ] || { echo "beads-linear-sync: no $projects_tsv; nothing to do" >&2; exit 0; }
+[ -f "$issues_jsonl" ] || { echo "beads-linear-sync: no $issues_jsonl" >&2; exit 0; }
+if [ -z "${LINEAR_API_KEY:-}" ] && [ "$dry_run" = 0 ]; then
+  echo "beads-linear-sync: LINEAR_API_KEY not set — cannot apply. Create one at Linear -> Settings -> API and 'export LINEAR_API_KEY=...'. Running in dry-run (compute-only) and continuing." >&2
+  dry_run=1
+fi
+
+json_escape() { local v="$1"; v="${v//\\/\\\\}"; v="${v//\"/\\\"}"; v="${v//$'\n'/\\n}"; v="${v//$'\r'/}"; v="${v//$'\t'/\\t}"; printf '%s' "$v"; }
+field() { printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -1 | sed "s/\"$2\":\"//; s/\"$//"; }
+
+linear_api() { # $1 = JSON body -> stdout = response
+  curl -sS -X POST "$LINEAR_GRAPHQL" -H "Authorization: $LINEAR_API_KEY" -H "Content-Type: application/json" -d "$1" 2>/dev/null
+}
+
+exit_code=0
+# projects.tsv: epic-id <TAB> linear-project-id
+while IFS=$'\t' read -r epic project_id _rest || [ -n "$epic" ]; do
+  case "$epic" in ''|\#*) continue ;; esac
+  [ -n "$project_id" ] || continue
+
+  total=0; closed=0; epic_title=""
+  while IFS= read -r line; do
+    id="$(field "$line" id)"; [ -n "$id" ] || continue
+    if [ "$id" = "$epic" ]; then epic_title="$(field "$line" title)"; continue; fi
+    case "$id" in "$epic".*) ;; *) continue ;; esac   # only direct-namespace children (epic.N…)
+    total=$((total+1))
+    [ "$(field "$line" status)" = "closed" ] && closed=$((closed+1))
+  done < "$issues_jsonl"
+
+  if [ "$total" -eq 0 ]; then echo "beads-linear-sync: epic $epic has no children in beads; skipping" >&2; continue; fi
+  pct=$(( closed * 100 / total ))
+  if   [ "$closed" -eq 0 ]; then health="onTrack"
+  elif [ "$closed" -ge "$total" ]; then health="onTrack"
+  else health="onTrack"; fi
+  marker="[beads:${epic}]"
+  body="${marker} ${closed}/${total} beads closed (${pct}%). Projected from Beads; work is tracked in Beads, not Linear."
+  echo "beads-linear-sync: $epic -> $project_id  ${closed}/${total} (${pct}%)" >&2
+  [ "$dry_run" = 1 ] && continue
+
+  # Idempotency: only post a new status update when the % changed. Read the latest update carrying our marker.
+  last="$(linear_api "$(printf '{"query":"query($id:String!){project(id:$id){projectUpdates(first:10){nodes{body}}}}","variables":{"id":"%s"}}' "$(json_escape "$project_id")")")"
+  if printf '%s' "$last" | grep -qF "${marker} ${closed}/${total} (${pct}%)" 2>/dev/null || printf '%s' "$last" | grep -qF "${marker} ${closed}/${total} beads closed (${pct}%)"; then
+    echo "  progress unchanged (${pct}%); no new update" >&2; continue
+  fi
+  resp="$(linear_api "$(printf '{"query":"mutation($p:String!,$b:String!,$h:ProjectUpdateHealthType){projectUpdateCreate(input:{projectId:$p,body:$b,health:$h}){success projectUpdate{id}}}","variables":{"p":"%s","b":"%s","h":"%s"}}' "$(json_escape "$project_id")" "$(json_escape "$body")" "$health")")"
+  if printf '%s' "$resp" | grep -q '"success":true'; then echo "  posted status update (${pct}%)" >&2
+  else echo "  status update FAILED (continuing): $(printf '%s' "$resp" | head -c 200)" >&2; exit_code=0; fi
+done < "$projects_tsv"
+
+exit "$exit_code"

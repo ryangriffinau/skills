@@ -20,6 +20,22 @@ the per-tool `install.sh` list — see `references/cheatsheet.md` §3).
 - A project needs to be symlinked into `projects_base` so `ntm spawn <name>` resolves.
 - Verifying the stack is installed and the Agent Mail server is up before a swarm session.
 
+## Onboarding a repo — "set it up for the flywheel and plan the work"
+
+When asked to onboard/flywheel a repo, **detect any existing workflow/issue/task system FIRST**, then route to Case A or B. Do not skip the detection step.
+
+**1. Detect an existing system** (before touching anything):
+- Look for a homegrown orchestrator or task tracker: `.workhorse/`, `.backpocket/`, `.bp/`, `scripts/bp`, `*/orchestrator/tasks/*.json`, `.agents/skills/*` workflow skills, `docs/workflow/`, `docs/agents/`, or `AGENTS.md` sections wiring a custom "workflow" / "artifact" / "issue-tracker" system.
+- Quick sweep: `grep -rilE 'orchestrat|workflow|task[-_.]?json|issue[-_.]?tracker|agent[-_.]?skills' AGENTS.md docs/ scripts/ 2>/dev/null` and read `AGENTS.md`.
+
+**2. Route:**
+- **Case A — an existing custom system IS present → MIGRATION.** `fw setup` → **audit** the existing system → `/p-draft-plan` the replacement (existing system → Agent Flywheel) → `/p-plan-to-beads` → **swarm** (archive the old system, rewrite `AGENTS.md` to the flywheel protocol, wire docs, verify) → ship. **Archive, never delete** (RULE 1). *(This is exactly the platform-monorepo `bp` and customer-template `.workhorse/.agents` migrations.)*
+- **Case B — no existing system → GREENFIELD.** `fw setup` → add the flywheel-protocol `AGENTS.md` snippet (confirm first) → done, the repo is flywheel-ready. Then plan + swarm the repo's actual **feature** work (not a migration).
+
+**3. Always human-confirmed:** which case it is (propose, confirm), and — for team repos — the Linear project mapping (1 beads epic ↔ 1 Linear project).
+
+`fw setup` + `scripts/flywheel-kickoff.sh` make setup + launch near-one-command; the **planning** (`/p-*` pipeline) is the intellectual step this skill does not do.
+
 ## Commands
 
 Run the bundled script `scripts/flywheel-link.sh` from inside the target repo:
