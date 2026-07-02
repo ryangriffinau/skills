@@ -47,6 +47,22 @@ Prevention: Step 1 env-preflight reads profile-declared required vars before spa
 **Evidence:** AT session — A1 blocked twice (BETTER_AUTH_SECRET placeholder, then
 RESEND_API_KEY); conductor `bunx convex env set` + unblock resumed the auth chain.
 
+## G3.5 — codex-update-preflight
+
+**Signal:** Fresh Codex panes drop to a bare shell immediately after launch; transcript
+shows an interactive self-update prompt such as "Update available" / "Update now"; a probe
+before spawn reports Codex is present but needs update handling.
+**Diagnosis:** Codex self-update is interactive and process-replacing. If it fires inside
+new worker panes, the update can complete and exit both panes cleanly. `ntm respawn` then
+recreates shells, not Codex workers, so the swarm starts at 0/N ready.
+**Fix:** Step 1 must run `flywheel-link.sh preflight` before any `ntm spawn`. If the Codex
+probe reports an update prompt, update/restart Codex from the conductor shell first, then
+rerun preflight and only spawn after the probe is clean. If this was missed and panes are
+already shells, use G7 recovery: kill the session and freshly spawn after updating.
+**Evidence:** Skills dogfood 2026-07-02 — fresh ntm spawn hit Codex
+`0.142.4 -> 0.142.5` interactive update; both panes exited to shells and recovery required
+`ntm kill` plus a fresh spawn on the updated binary.
+
 ## G4 — one-shot-only
 
 **Signal:** Worker "Working" grows past ~10 min with a background task on `dev`, `--watch`,
@@ -175,3 +191,19 @@ session (either app, any teammate) claims the expired lease and continues from t
 **Evidence:** AT session — the user forked the session; the background timer died with no
 completion record; the swarm ran unconducted (reached 86% on momentum, but the endgame
 gate sat blocked until the next manual poll noticed).
+
+## G14 — ship-bead-gating
+
+**Signal:** A ship/release bead is ready while workers are still live; both a worker and
+the conductor claim or perform ship actions on the same branch; duplicate PRs or merge
+attempts appear.
+**Diagnosis:** The ship bead is ordinary ready work to workers, but it is also the
+conductor's natural endgame concern. Without a graph or session gate, both can race and
+perform release actions against the same branch.
+**Fix:** Before the conductor does any claimable ship-bead work, make ownership explicit:
+either add a conductor-held blocker/hold dependency so workers cannot claim it, or verify
+the swarm is stopped/no live worker can claim it. If a worker already owns ship, do not race
+it — let the worker finish and the conductor only verifies the result.
+**Evidence:** Skills conductor dogfood 2026-07-02 — after reality-check closed, the ship
+bead unblocked and a live worker opened/merged a PR while the conductor opened/merged a
+parallel PR for the same branch; benign only because the second PR carried beads state.

@@ -34,8 +34,9 @@ feature branch — NEVER main, NEVER git worktrees.
 **Blocked?** If a bead needs something you cannot provide (external secret, deployment
 env, a human decision): `br update <id> --status blocked`, add a `br comments add` note
 saying exactly what is missing and the exact command that resumes it, post the blocker to
-Agent Mail, and MOVE ON to the next ready bead. Never close a red bead; never idle while
-`br ready` is non-empty.
+Agent Mail, and MOVE ON to the next ready bead. Missing env vars must include
+`ENV-MISSING: <NAME>` in the bead comment so conductor triage can unblock via the env
+preflight path. Never close a red bead; never idle while `br ready` is non-empty.
 
 **Coordination:** respect serial chains encoded in the bead graph — never start a blocked
 bead. If your target files are reserved by another agent, pick a non-conflicting ready

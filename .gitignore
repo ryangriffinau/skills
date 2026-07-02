@@ -6,3 +6,9 @@ node_modules/
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# flywheel conductor runtime state (machine-local; see flywheel-conductor skill)
+.flywheel/runtime/
+.agents/
+.ntm/
+skills-lock.json

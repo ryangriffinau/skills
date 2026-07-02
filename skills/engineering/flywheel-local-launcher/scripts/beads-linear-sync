@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# beads-linear-sync — apply Beads -> Linear project-level projection idempotently.
+#
+# Project-level only: it never mirrors child beads to Linear issues. Linear is the
+# human roadmap view; Beads remains the source of truth for execution.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LINEAR_GRAPHQL="${LINEAR_GRAPHQL:-https://api.linear.app/graphql}"
+
+usage() {
+  echo "usage: beads-linear-sync [--repo DIR | --all] [--dry-run]" >&2
+}
+
+repo="."
+dry_run=0
+all=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      repo="$2"
+      shift 2
+      ;;
+    --all)
+      all=1
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "beads-linear-sync: unknown arg: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+log() {
+  echo "beads-linear-sync: $*" >&2
+}
+
+json_escape() {
+  local v="$1"
+  v="${v//\\/\\\\}"
+  v="${v//\"/\\\"}"
+  v="${v//$'\n'/\\n}"
+  v="${v//$'\r'/}"
+  v="${v//$'\t'/\\t}"
+  printf '%s' "$v"
+}
+
+field() {
+  printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -1 | sed "s/\"$2\":\"//; s/\"$//"
+}
+
+resolve_profile() {
+  local repo_abs="$1"
+  eval "$("$SCRIPT_DIR/flywheel-profile.sh" --repo "$repo_abs" 2>/dev/null)" || true
+}
+
+resolve_linear_key() {
+  local repo_abs="$1" value
+  if [ -x "$SCRIPT_DIR/flywheel-env" ]; then
+    value="$("$SCRIPT_DIR/flywheel-env" get LINEAR_API_KEY --repo "$repo_abs" 2>/dev/null)" || value=""
+    if [ -n "$value" ]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  fi
+  if [ -n "${LINEAR_API_KEY:-}" ]; then
+    printf '%s' "$LINEAR_API_KEY"
+    return 0
+  fi
+  return 1
+}
+
+linear_api() {
+  local key="$1" body="$2" output_file err_file status
+  LINEAR_RESPONSE=""
+  output_file="$(mktemp "${TMPDIR:-/tmp}/beads-linear-sync-response.XXXXXX")"
+  err_file="$(mktemp "${TMPDIR:-/tmp}/beads-linear-sync-curl.XXXXXX")"
+  curl -sS -X POST "$LINEAR_GRAPHQL" \
+    -H "Authorization: $key" \
+    -H "Content-Type: application/json" \
+    -d "$body" >"$output_file" 2>"$err_file"
+  status="$?"
+  LINEAR_RESPONSE="$(cat "$output_file" 2>/dev/null || true)"
+  LINEAR_CURL_ERROR="$(cat "$err_file" 2>/dev/null || true)"
+  rm -f "$output_file" "$err_file"
+
+  if [ "$status" -ne 0 ]; then
+    return 10
+  fi
+  if printf '%s' "$LINEAR_RESPONSE" | grep -q '"errors"[[:space:]]*:'; then
+    return 11
+  fi
+  return 0
+}
+
+graphql_body() {
+  local query="$1" variables="$2"
+  printf '{"query":"%s","variables":%s}' "$(json_escape "$query")" "$variables"
+}
+
+mapped_epic_stats() {
+  local epic="$1" issues_jsonl="$2" line id status
+  total=0
+  closed=0
+  blocked=0
+  epic_title=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    id="$(field "$line" id)"
+    [ -n "$id" ] || continue
+    if [ "$id" = "$epic" ]; then
+      epic_title="$(field "$line" title)"
+      continue
+    fi
+    case "$id" in
+      "$epic".*) ;;
+      *) continue ;;
+    esac
+    total=$((total + 1))
+    status="$(field "$line" status)"
+    [ "$status" = "closed" ] && closed=$((closed + 1))
+    [ "$status" = "blocked" ] && blocked=$((blocked + 1))
+  done < "$issues_jsonl"
+}
+
+latest_marker_progress() {
+  local response="$1" marker="$2" match
+  match="$(
+    printf '%s' "$response" |
+      grep -oE '\[beads:[^]]+\] [0-9]+/[0-9]+' |
+      grep -F "$marker" |
+      head -1 |
+      sed 's/^.*] //' || true
+  )"
+  if [ -n "$match" ]; then
+    printf '%s' "$match"
+    return 0
+  fi
+  return 1
+}
+
+auth_probe() {
+  local key="$1" project_id="$2" body user api_status
+  body="$(graphql_body 'query($id:String!){viewer{name email} project(id:$id){id name}}' "{\"id\":\"$(json_escape "$project_id")\"}")"
+  linear_api "$key" "$body"
+  api_status="$?"
+  if [ "$api_status" -eq 0 ]; then
+    user="$(field "$LINEAR_RESPONSE" name)"
+    [ -n "$user" ] || user="unknown"
+    echo "  key valid (user $user) ✓ project reachable ✓" >&2
+    return 0
+  fi
+  case "$api_status" in
+    10) echo "  auth probe curl/network error (continuing): ${LINEAR_CURL_ERROR:-curl failed}" >&2 ;;
+    11) echo "  auth probe GraphQL errors (continuing): $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)" >&2 ;;
+  esac
+  return 0
+}
+
+sync_repo() {
+  local repo_input="$1" repo_abs projects_tsv issues_jsonl repo_dry_run key="" key_resolved=0
+  local epic project_id rest pct health marker body latest_body last_progress current_progress resp_body api_status
+  local synced=0
+
+  repo_abs="$(cd "$repo_input" 2>/dev/null && pwd)" || { log "repo not found: $repo_input"; return 0; }
+  projects_tsv="$repo_abs/.flywheel/projects.tsv"
+  issues_jsonl="$repo_abs/.beads/issues.jsonl"
+  repo_dry_run="$dry_run"
+
+  resolve_profile "$repo_abs"
+  if [ "${FLYWHEEL_PROJECTION_APP:-}" != "linear" ]; then
+    return 0
+  fi
+  [ -f "$projects_tsv" ] || { log "$repo_abs: no .flywheel/projects.tsv; nothing to do"; return 0; }
+  [ -f "$issues_jsonl" ] || { log "$repo_abs: no .beads/issues.jsonl; nothing to do"; return 0; }
+
+  if key="$(resolve_linear_key "$repo_abs")"; then
+    key_resolved=1
+  elif [ "$repo_dry_run" = 0 ]; then
+    log "$repo_abs: LINEAR_API_KEY not set — cannot apply. Create one at Linear -> Settings -> API and set it with flywheel-env. Running in dry-run (compute-only) and continuing."
+    repo_dry_run=1
+  fi
+
+  while IFS=$'\t' read -r epic project_id rest || [ -n "$epic" ]; do
+    case "$epic" in
+      ""|\#*) continue ;;
+    esac
+    [ -n "$project_id" ] || continue
+
+    mapped_epic_stats "$epic" "$issues_jsonl"
+    if [ "$total" -eq 0 ]; then
+      log "$repo_abs: epic $epic has no children in Beads; skipping"
+      continue
+    fi
+
+    pct=$((closed * 100 / total))
+    health="onTrack"
+    [ "$blocked" -gt 0 ] && health="atRisk"
+    marker="[beads:${epic}]"
+    current_progress="${closed}/${total}"
+    body="${marker} ${current_progress} beads closed (${pct}%). Projected from Beads; work is tracked in Beads, not Linear."
+    log "$repo_abs: $epic -> $project_id ${current_progress} (${pct}%, ${health})"
+    synced=$((synced + 1))
+
+    if [ "$repo_dry_run" = 1 ]; then
+      echo "  dry-run: would post ${health} update: $body" >&2
+      if [ "$key_resolved" = 1 ]; then
+        auth_probe "$key" "$project_id"
+      else
+        echo "  dry-run: LINEAR_API_KEY unresolved; auth probe skipped" >&2
+      fi
+      continue
+    fi
+
+    latest_body="$(graphql_body 'query($id:String!){project(id:$id){projectUpdates(first:25){nodes{body}}}}' "{\"id\":\"$(json_escape "$project_id")\"}")"
+    linear_api "$key" "$latest_body"
+    api_status="$?"
+    if [ "$api_status" -ne 0 ]; then
+      case "$api_status" in
+        10) echo "  projectUpdates curl/network error (continuing): ${LINEAR_CURL_ERROR:-curl failed}" >&2 ;;
+        11) echo "  projectUpdates GraphQL errors (continuing): $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)" >&2 ;;
+      esac
+      continue
+    fi
+
+    last_progress="$(latest_marker_progress "$LINEAR_RESPONSE" "$marker" || true)"
+    if [ "$last_progress" = "$current_progress" ]; then
+      echo "  unchanged, no new update (${current_progress})" >&2
+      continue
+    fi
+
+    resp_body="$(graphql_body 'mutation($p:String!,$b:String!,$h:ProjectUpdateHealthType){projectUpdateCreate(input:{projectId:$p,body:$b,health:$h}){success projectUpdate{id}}}' "{\"p\":\"$(json_escape "$project_id")\",\"b\":\"$(json_escape "$body")\",\"h\":\"$health\"}")"
+    linear_api "$key" "$resp_body"
+    api_status="$?"
+    if [ "$api_status" -eq 0 ]; then
+      if printf '%s' "$LINEAR_RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        echo "  posted status update (${current_progress})" >&2
+      else
+        echo "  status update GraphQL success=false (continuing): $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)" >&2
+      fi
+    else
+      case "$api_status" in
+        10) echo "  status update curl/network error (continuing): ${LINEAR_CURL_ERROR:-curl failed}" >&2 ;;
+        11) echo "  status update GraphQL errors (continuing): $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)" >&2 ;;
+      esac
+    fi
+  done < "$projects_tsv"
+
+  log "$repo_abs: synced ${synced} mapped project(s)"
+  return 0
+}
+
+projects_base() {
+  ntm config show 2>/dev/null | sed -n 's/^projects_base = "\(.*\)"/\1/p' | head -1
+}
+
+if [ "$all" = 1 ]; then
+  base="$(projects_base)"
+  if [ -z "$base" ] || [ ! -d "$base" ]; then
+    log "projects_base unavailable; run ntm config show"
+    exit 0
+  fi
+  for linked_repo in "$base"/*; do
+    [ -e "$linked_repo" ] || continue
+    [ -d "$linked_repo" ] || continue
+    sync_repo "$linked_repo"
+  done
+else
+  sync_repo "$repo"
+fi
+
+exit 0

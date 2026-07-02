@@ -14,10 +14,20 @@ curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/m
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh?$(date +%s)"   | bash -s -- --easy-mode      # DCG
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_session_search/main/install.sh?$(date +%s)" | bash -s -- --easy-mode --verify  # CASS
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ultimate_bug_scanner/main/install.sh?$(date +%s)"        | bash -s -- --easy-mode      # UBS
+curl -fsSL https://github.com/Dicklesworthstone/post_compact_reminder/raw/refs/heads/main/install-post-compact-reminder.sh | bash                 # Claude compact reminder
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_account_manager/main/install.sh?$(date +%s)" | bash -s -- --verify  # caam auth profiles
 brew install fzf            # mainstream → brew is fine
 ```
 
 **Install policy for *any* future tool:** Homebrew is the default for mainstream tools — `brew info <name>` shows `homebrew/core (bottled)` → use brew. The only carve-out: indie tools whose canonical channel is their own `install.sh` or a third-party `user/tap` (the whole Dicklesworthstone stack) → use `install.sh`. Never install one tool through two managers.
+
+`post_compact_reminder` installs a Claude Code `SessionStart` hook with matcher `compact`;
+after compaction it tells the next Claude session to reread `AGENTS.md` before continuing,
+which supports conductor re-entry and G13 survivability. `caam` stores and activates coding
+agent auth profiles: after install, snapshot the current Claude auth with
+`caam backup claude current-account`; adding a second account is manual because it requires
+the tool's normal interactive `/login` flow. Use the `install.sh` path for `caam`, not the
+third-party brew tap.
 
 ### 2. Start + wire Agent Mail
 ```bash
@@ -93,6 +103,7 @@ Absence is valid and means Emmanuel defaults:
 | `FLYWHEEL_PRECOMMIT` | `light`, `heavy` | `light` |
 | `FLYWHEEL_PREPUSH` | `full`, `none` | `full` |
 | `FLYWHEEL_PROJECTION_APP` | empty, `linear` | empty |
+| `FLYWHEEL_ENV_REQUIRED` | comma-separated env var names | empty |
 
 Package manager is detected, not stored: `package.json` `packageManager` wins; otherwise lockfiles are checked in this order: `pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`, `yarn.lock`; otherwise `none`.
 
@@ -109,6 +120,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=
+FLYWHEEL_ENV_REQUIRED=
 ```
 
 Example team repo with Linear projection:
@@ -118,13 +130,49 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=linear
+FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY
 ```
+
+### Flywheel env values
+
+Secrets and machine-local config for flywheel tooling go through `scripts/flywheel-env`.
+Humans may run `set` and `list`; agents and scripts use only `get` and `check`.
+
+```bash
+scripts/flywheel-env set LINEAR_API_KEY --repo .      # interactive; TTY required
+scripts/flywheel-env check --repo .                   # reads FLYWHEEL_ENV_REQUIRED
+scripts/flywheel-env get LINEAR_API_KEY --repo .      # prints the value for tooling
+scripts/flywheel-env list --repo .                    # masked table only
+```
+
+Resolution order is fixed: process env > repo `.flywheel/env.local` > repo `.env`
+(read-only) > global `~/.flywheel/env`. The CLI writes only the flywheel-owned stores
+(`.flywheel/env.local` or `~/.flywheel/env`, both `chmod 600`) and never writes a project's
+`.env`. `set` exits immediately in non-TTY contexts so workers never hang; when an agent is
+missing a required value it should mark the bead blocked with a comment containing
+`ENV-MISSING: <NAME>`.
 
 When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the manual epic→Linear-project map (create/choose the Linear project yourself, paste its id, commit it):
 ```text
 customer-template-architecture-transfer-w7o	c538d7a2-a7bd-4474-a4d9-8d024d4478de
 ```
-Then **apply the projection** with the runnable, idempotent `scripts/beads-linear-sync --repo .` — export a `LINEAR_API_KEY` (a Linear *personal* key from Settings → API; any team member can make one, no Claude/MCP session needed). It posts a Linear project **status update** carrying the epic's beads progress **only when the % changed** (safe to re-run or put on a hook), and it **never mirrors child beads to Linear issues** — Linear stays a project-level roadmap view. Fail-open: a missing key or an API error logs and continues.
+Then **apply the projection** with the runnable, idempotent `scripts/beads-linear-sync --repo .`.
+It reads `LINEAR_API_KEY` through `scripts/flywheel-env get LINEAR_API_KEY --repo .`, with
+process env as a fallback if the CLI is absent. It posts a Linear project **status update**
+carrying the epic's beads progress **only when the % changed**, and it **never mirrors child
+beads to Linear issues** — Linear stays a project-level roadmap view. Fail-open: a missing
+key or an API error logs and continues.
+
+Default triggers are event-driven: the ship bead runs the sync, and the conductor runs it
+again during Step 5 endgame. Optional background sweep for humans who want portfolio
+freshness between ships:
+
+```bash
+launchctl submit -l flywheel-linear-sync -- /bin/bash -lc 'while sleep 3600; do bash ~/.agents/skills/flywheel-local-launcher/scripts/beads-linear-sync --all; done'
+```
+
+The sweep projects the local checkout state for every linked repo whose profile opts into
+Linear projection, so stale checkouts produce stale project updates.
 
 ## C. The projects model + the one-path rule
 

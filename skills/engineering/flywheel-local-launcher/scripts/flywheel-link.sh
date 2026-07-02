@@ -236,6 +236,9 @@ FLYWHEEL_PRECOMMIT=$precommit
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=
 
+# Required env var names checked before a swarm starts, comma-separated.
+# FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY
+
 # To project beads to Linear, set FLYWHEEL_PROJECTION_APP=linear and add:
 # .flywheel/projects.tsv  # epic-id<TAB>linear-project-id
 PROFILE
