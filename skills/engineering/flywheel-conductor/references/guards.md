@@ -47,6 +47,22 @@ Prevention: Step 1 env-preflight reads profile-declared required vars before spa
 **Evidence:** AT session — A1 blocked twice (BETTER_AUTH_SECRET placeholder, then
 RESEND_API_KEY); conductor `bunx convex env set` + unblock resumed the auth chain.
 
+## G3.5 — codex-update-preflight
+
+**Signal:** Fresh Codex panes drop to a bare shell immediately after launch; transcript
+shows an interactive self-update prompt such as "Update available" / "Update now"; a probe
+before spawn reports Codex is present but needs update handling.
+**Diagnosis:** Codex self-update is interactive and process-replacing. If it fires inside
+new worker panes, the update can complete and exit both panes cleanly. `ntm respawn` then
+recreates shells, not Codex workers, so the swarm starts at 0/N ready.
+**Fix:** Step 1 must run `flywheel-link.sh preflight` before any `ntm spawn`. If the Codex
+probe reports an update prompt, update/restart Codex from the conductor shell first, then
+rerun preflight and only spawn after the probe is clean. If this was missed and panes are
+already shells, use G7 recovery: kill the session and freshly spawn after updating.
+**Evidence:** Skills dogfood 2026-07-02 — fresh ntm spawn hit Codex
+`0.142.4 -> 0.142.5` interactive update; both panes exited to shells and recovery required
+`ntm kill` plus a fresh spawn on the updated binary.
+
 ## G4 — one-shot-only
 
 **Signal:** Worker "Working" grows past ~10 min with a background task on `dev`, `--watch`,

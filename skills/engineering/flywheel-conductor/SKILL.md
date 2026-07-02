@@ -39,11 +39,12 @@ compaction, or teammate adopts an orphaned swarm — G13). If the repo has no
 `.flywheel/runtime/certified.json`, route to **certify** (below) with user confirmation.
 *Done when: lease held; journal open; check-in armed or consciously not.*
 
-**1 — Preflight (delegated).** Launcher `flywheel-link.sh preflight` green; `ntm config
-show` prints **no warning** (G2); resolve `.flywheel/profile`; env-preflight every
-profile-declared deployment var (generate-and-set self-generated secrets — names only in
-the journal; G3); clean tree on the profile's feature branch. *Done when: every check
-green or the gap surfaced.*
+**1 — Preflight (delegated).** Launcher `flywheel-link.sh preflight` green, including the
+Codex auth/currency probe that catches interactive self-update prompts before spawning
+(G3.5); `ntm config show` prints **no warning** (G2); resolve `.flywheel/profile`;
+env-preflight every profile-declared deployment var (generate-and-set self-generated
+secrets — names only in the journal; G3); clean tree on the profile's feature branch.
+*Done when: every check green or the gap surfaced.*
 
 **2 — Encode check.** The epic exists with ready beads and reality-check + ship closers;
 serial chains are enforced by graph deps, not prompts (G11); critical path named. If not:
@@ -83,6 +84,7 @@ Full playbook — signal, diagnosis, fix, evidence: [references/guards.md](refer
 | Urge to run `ntm controller`; controller pane ERR/rate-limit | G1 no-controller-pane |
 | ntm prints `config load failed`; workers at xhigh | G2 config-valid |
 | Bead blocked on a missing deployment env var | G3 env-preflight |
+| Codex reports an interactive update before spawn | G3.5 codex-update-preflight |
 | Worker hung on a watch/dev command | G4 one-shot-only |
 | Worker scanning the filesystem for tooling | G5 exact-tooling |
 | Ready beads, zero claims, idle panes | G6 assignment-gap |
