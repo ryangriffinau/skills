@@ -113,6 +113,15 @@ cd <repo>/packages/backend && bunx convex env set <VAR_NAME> '<value>'
 # journal the NAME only, never the value
 ```
 
+## Project beads to Linear at endgame
+
+Run only from the ship bead or conductor Step 5, never inside the worker loop. It is
+idempotent and fail-open; the local checkout's beads state is what gets projected.
+
+```bash
+bash ~/.agents/skills/flywheel-local-launcher/scripts/beads-linear-sync --repo <repo>
+```
+
 ## Teardown (Step 5)
 
 ```bash

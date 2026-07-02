@@ -79,10 +79,16 @@ open http://127.0.0.1:8765/mail # messages + reservations (incl. the conductor l
 
 - **Commit + push per bead, immediately.** Each agent commits its own small change and pushes the moment a bead closes (unpushed = invisible to other agents; piling up changes creates the "mixed tree" that stalls commits). The lease guard checks reservations on commit.
 - **Ship bead follows `.flywheel/profile` mode:** `solo` commits and pushes to the working branch with no PR. `team` opens the PR (`gh pr create`) and sets it **ready**, so CI + the preview env run, then **merge when green** — directly for safe DX / non-prod / template changes, or with user approval otherwise. `gh pr merge <n> --auto --squash` merges the moment checks pass (or `--squash` once they're green). The agent should not block-poll CI; it opens ready, enables auto-merge when available, and lets CI/the human complete. Then **`/pr-closeout`**.
+- **Linear projection triggers:** the ship bead runs `scripts/beads-linear-sync --repo .` when `.flywheel/profile` sets `FLYWHEEL_PROJECTION_APP=linear`; the conductor also runs the same sync during Step 5 endgame. The sync is idempotent and projects the local checkout's beads progress as a Linear project status update.
 - **Verify:** **`/p-deploy-and-verify`**.
 - **Close the loop:** `br changelog` → close the Linear issue. `ntm handoff create <name> --auto` for cross-session continuity.
 
 Make shipping part of the swarm by encoding "open PR / deploy-verify / changelog" as final beads depending on the implementation beads.
+
+Machine helpers live in setup: `flywheel-env` is the human-owned secret/config store for
+flywheel tooling, `post_compact_reminder` reminds Claude Code to reread `AGENTS.md` after
+compaction, and `caam` snapshots/switches coding-agent auth profiles for rate-limit
+recovery.
 
 ---
 
