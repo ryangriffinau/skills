@@ -105,12 +105,6 @@ Follow AGENTS.md. Run /p-deep-project-primer first. Plan: $plan. Loop: run br re
 PROMPT
 )"
 
-controller_brief="$(
-  cat <<BRIEF
-You are the coordinator/reviewer for $session. Coordinate and review only; do not claim beads. Approve worker Agent Mail contact requests, watch br ready and ntm status, keep agents on one shared tree with no worktrees, and require reservation, tests, ubs --staged --fail-on-warning, fresh-eyes review, br close, explicit-path commit, and immediate push for every bead. If agents are 0/$cod_count ready, respawn Codex panes, re-send the kickoff prompt, and run coordinator assign.
-BRIEF
-)"
-
 spawn_cmd="ntm spawn $(shell_quote "$session") --cod=$cod_count --assign --strategy=dependency"
 if [ -n "$cass_area" ]; then
   spawn_cmd="$spawn_cmd --cass-context $(shell_quote "$cass_area")"
@@ -119,9 +113,10 @@ spawn_cmd="$spawn_cmd --init-prompt $(shell_quote "$init_prompt")"
 
 cat <<RECIPE
 $spawn_cmd
-ntm controller $(shell_quote "$session")
-tmux send-keys -t $(shell_quote "$session:0.<pane>") $(shell_quote "$controller_brief")
-tmux send-keys -t $(shell_quote "$session:0.<pane>") Enter
+
+Conductor note: do NOT launch a controller pane — a same-account Claude controller
+rate-limits itself (flywheel-conductor guard G1). Drive this swarm from your own agent
+session with the flywheel-conductor skill (poll -> triage -> act -> journal).
 
 Readiness note: if 0/$cod_count agents are ready, respawn Codex panes with: ntm respawn $(shell_quote "$session") --type=cod --force
 Then re-send the kickoff prompt to Codex panes and assign work:

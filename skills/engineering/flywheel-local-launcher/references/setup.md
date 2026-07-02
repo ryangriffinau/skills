@@ -43,6 +43,12 @@ auto_assign = true   # keep feeding ready beads to idle agents (without this the
 ```
 Set `projects_base` with `ntm config set projects-base ~/Code/github`.
 
+> **⚠ Config parsing is all-or-nothing (conductor guard G2):** ONE unknown field makes ntm
+> reject the ENTIRE file and silently fall back to built-in defaults — codex **xhigh** and
+> the default `projects_base`. Classic trap: `default_claude` belongs under `[models]`,
+> **never** `[agents]`. After any edit verify `ntm config show` prints **no warning**; and
+> running agents never pick up config changes — kill + respawn the session.
+
 ### 4. Learn `bv` (do this — the tutorial is excellent)
 `bv` is your **work dashboard**. **Humans run bare `bv`** (an interactive TUI of the whole bead graph) — *not* `bv --robot-*`, which is JSON/TOON for *agents*. Run `bv` once and walk its built-in tutorial; thereafter it's how you watch progress instead of re-typing `br epic status`.
 

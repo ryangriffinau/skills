@@ -43,8 +43,8 @@ assert_contains "$first_line" "ntm spawn 'alpha' --cod=2 --assign --strategy=dep
 assert_contains "$output" "Plan: docs/specs/flywheel profile/PLAN.md." "plan in prompt"
 assert_contains "$output" "Package manager: pnpm." "pnpm guidance"
 assert_contains "$output" "Final ship bead: commit and push to the working branch; no PR." "solo ship guidance"
-assert_contains "$output" "ntm controller 'alpha'" "controller command"
-assert_contains "$output" "tmux send-keys -t 'alpha:0.<pane>'" "tmux controller brief"
+assert_not_contains "$output" "ntm controller" "no controller pane (conductor guard G1)"
+assert_contains "$output" "flywheel-conductor" "conductor note present"
 assert_contains "$output" "Readiness note: if 0/2 agents are ready" "readiness count"
 assert_contains "$output" "ntm coordinator assign 'alpha'" "assign command"
 

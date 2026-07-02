@@ -321,6 +321,13 @@ setup() {
     echo "==> ntm init";        ntm init  || echo "  (ntm init skipped/failed)"
     echo "==> lease guard";     install_guard
     echo "==> .flywheel/profile"; scaffold_profile
+    echo "==> .flywheel/runtime gitignore"
+    if ! grep -qs "^\.flywheel/runtime/" .gitignore; then
+      printf '\n# flywheel conductor runtime state (machine-local; see flywheel-conductor skill)\n.flywheel/runtime/\n' >> .gitignore
+      echo "  + .flywheel/runtime/ added to .gitignore"
+    else
+      echo "  = .flywheel/runtime/ already ignored"
+    fi
     echo "==> AGENTS.md check"; agents_md_check
   )
 }
