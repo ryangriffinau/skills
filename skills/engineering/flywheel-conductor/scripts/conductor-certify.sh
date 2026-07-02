@@ -2,7 +2,7 @@
 # conductor-certify.sh — live proof the conductor workflow works on this machine.
 #
 #   sandbox repo → 3-bead env-free docs epic → one codex worker driven to green →
-#   one INJECTED pane-kill must be detected (G7) and respawned within one cycle →
+#   one INJECTED pane-kill must be detected (G7) and recovered by fresh spawn →
 #   writes .flywheel/runtime/certified.json into --repo.
 #
 # usage: conductor-certify.sh --repo DIR --yes [--keep] [--timeout-mins N]
@@ -92,6 +92,7 @@ log "worker spawned"
 # ---------- drive ----------
 deadline=$(( $(date +%s) + timeout_mins * 60 ))
 killed=false g7_seen=false g7_recovered=false last_nudge=0
+g7_respawn_attempted=false g7_fresh_spawned=false g7_recovery_closed_at=-1
 while :; do
   now="$(date +%s)"
   [ "$now" -lt "$deadline" ] || { log "TIMEOUT after ${timeout_mins}m"; exit 1; }
@@ -102,17 +103,35 @@ while :; do
   verdict="$(printf '%s' "$snap" | to 120 bash "$TRIAGE")"
   guards="$(printf '%s' "$verdict" | python3 -c 'import json,sys; print(" ".join(e["guard"] for e in json.load(sys.stdin)["exceptions"]))')"
   log "closed=$closed/3 guards=[${guards:-none}]"
+  if $killed && $g7_fresh_spawned && ! $g7_recovered && [ "$closed" -gt "$g7_recovery_closed_at" ]; then
+    g7_recovered=true
+    log "G7 recovery proven: closed advanced from $g7_recovery_closed_at to $closed"
+  fi
 
   # G7 handling — the injected-kill recovery we are certifying
   case " $guards " in
     *" G7 "*)
       g7_seen=true
       pane="$(printf '%s' "$verdict" | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin)["exceptions"] if x["guard"]=="G7"]; print(e[0].get("pane",1))')"
-      log "G7 detected on pane $pane -> respawning"
-      to 90 ntm respawn "$session" --panes="$pane" --force >/dev/null 2>&1 || true
-      perl -e 'sleep 20'
-      to 15 ntm send "$session" --cod "$init_prompt" >/dev/null 2>&1 || true
-      $killed && g7_recovered=true
+      if ! $g7_respawn_attempted; then
+        log "G7 detected on pane $pane -> trying one ntm respawn probe"
+        to 90 ntm respawn "$session" --panes="$pane" --force >/dev/null 2>&1 || true
+        g7_respawn_attempted=true
+        perl -e 'sleep 20'
+      elif ! $g7_fresh_spawned; then
+        log "G7 persisted after ntm respawn -> killing session and fresh-spawning worker"
+        g7_recovery_closed_at="$closed"
+        to 60 ntm kill "$session" --force >/dev/null 2>&1 || true
+        perl -e 'sleep 5'
+        ( cd "$sandbox" && to 200 ntm spawn "$session" --cod=1 --init-prompt "$init_prompt" >/dev/null 2>&1 ) \
+          || { log "fresh ntm spawn failed during G7 recovery"; exit 1; }
+        g7_fresh_spawned=true
+        last_nudge=0
+        perl -e 'sleep 20'
+      else
+        log "G7 still present after one ntm respawn and one kill+fresh-spawn; failing"
+        exit 1
+      fi
       ;;
     *" G6 "*)
       if [ $(( now - last_nudge )) -gt 90 ]; then
@@ -131,6 +150,7 @@ while :; do
 
   if [ "$closed" -ge 3 ]; then
     if $killed && ! $g7_seen; then log "epic green but injected kill was never detected"; exit 1; fi
+    if $killed && ! $g7_recovered; then log "epic green but G7 recovery was not proven by closed-count progress"; exit 1; fi
     break
   fi
   perl -e 'sleep 45'

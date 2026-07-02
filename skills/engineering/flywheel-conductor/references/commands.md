@@ -40,11 +40,13 @@ bash ~/.agents/skills/flywheel-local-launcher/scripts/flywheel-kickoff.sh <S> \
 Post-spawn verification (G6): workers show the profile effort in their pane footer
 (default `high`, not `xhigh`) and a bead moves to in_progress within one check-in.
 
-## Respawn a dead pane (G7)
+## Recover a dead Codex pane (G7)
 
 ```bash
-to 60 ntm respawn <S> --panes=<N> --force
-# respawned panes lose the init-prompt — re-feed it (see targeted re-prompt)
+to 60 ntm kill <S> --force
+to 200 ntm spawn <S> --cod=<COUNT> --init-prompt "<same kickoff prompt>"
+# ntm respawn leaves a bare shell; fresh spawn is the reliable Codex relaunch.
+# Check any killed worker's in_progress bead with G10 before assigning new work.
 ```
 
 ## Broadcast nudge to all codex workers (G6)

@@ -90,11 +90,16 @@ mid-run stall with 4 ready + 0 claiming.
 **Signal:** Poll pane `state: shell`; transcript tail is a zsh/bash prompt or
 `zsh: parse error`; ntm dashboard shows the pane as a user shell.
 **Diagnosis:** Codex exited cleanly (crash, self-update, or parse error typed into the
-shell) — a *clean* exit evades `--auto-restart`, which only watches for crashes.
-**Fix:** `ntm respawn <session> --panes=<N> --force`, then re-feed the kickoff via
-`ntm send`/`tmux send-keys` (respawned panes lose their init-prompt). Verify it claims.
-**Evidence:** AT session — pane 3 died to zsh three times; auto-restart never caught it;
-manual respawn + re-prompt recovered each time.
+shell) — a *clean* exit evades `--auto-restart`, which only watches for crashes. `ntm
+respawn` uses `tmux respawn-pane -k`: it leaves a bare shell and does **not** relaunch
+Codex, so sending the kickoff prompt just types into that shell.
+**Fix:** Reliable recovery is session-level: `ntm kill <session> --force`, then fresh
+`ntm spawn <session> --cod=<N> --init-prompt "<same kickoff>"`. This costs all live
+workers in the session, but the shared tree + beads graph make it safe: workers resume
+from `br ready`. After restart, apply G10 to any bead left `in_progress` by the killed
+worker before assigning new work.
+**Evidence:** Skills certify 2026-07-02 — `ntm respawn` fired repeatedly and never
+relaunched Codex; kill + fresh spawn relaunched cleanly and resumed from beads.
 
 ## G8 — hang-vs-deep-work (the judgment call)
 

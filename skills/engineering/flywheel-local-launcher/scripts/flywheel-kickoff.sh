@@ -118,8 +118,8 @@ Conductor note: do NOT launch a controller pane — a same-account Claude contro
 rate-limits itself (flywheel-conductor guard G1). Drive this swarm from your own agent
 session with the flywheel-conductor skill (poll -> triage -> act -> journal).
 
-Readiness note: if 0/$cod_count agents are ready, respawn Codex panes with: ntm respawn $(shell_quote "$session") --type=cod --force
-Then re-send the kickoff prompt to Codex panes and assign work:
-ntm send $(shell_quote "$session") --cod $(shell_quote "$init_prompt")
+Readiness note: if Codex panes are dead shells, do not use ntm respawn; it leaves a shell without relaunching Codex. Kill and fresh-spawn the session, then assign work:
+ntm kill $(shell_quote "$session") --force
+$spawn_cmd
 ntm coordinator assign $(shell_quote "$session")
 RECIPE
