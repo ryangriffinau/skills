@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+# Human-owned flywheel env store. Tooling uses get/check; only humans use set.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROFILE_RESOLVER="$SCRIPT_DIR/flywheel-profile.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage:
+  flywheel-env set [KEY] [--repo DIR]
+  flywheel-env get KEY [--repo DIR]
+  flywheel-env check [KEY...] [--repo DIR]
+  flywheel-env list [--repo DIR]
+USAGE
+}
+
+repo="."
+
+trim() {
+  local value="$1"
+  printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+valid_key() {
+  case "$1" in
+    ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+repo_abs() {
+  cd "$repo" 2>/dev/null && pwd
+}
+
+global_env_file() {
+  printf '%s/.flywheel/env' "${HOME:?HOME is required}"
+}
+
+project_env_file() {
+  printf '%s/.flywheel/env.local' "$1"
+}
+
+project_dotenv_file() {
+  printf '%s/.env' "$1"
+}
+
+strip_simple_quotes() {
+  local value="$1" first last len
+  value="${value%$'\r'}"
+  value="$(trim "$value")"
+  len="${#value}"
+  if [ "$len" -ge 2 ]; then
+    first="${value:0:1}"
+    last="${value: -1}"
+    if { [ "$first" = "'" ] && [ "$last" = "'" ]; } || { [ "$first" = '"' ] && [ "$last" = '"' ]; }; then
+      value="${value:1:len-2}"
+    fi
+  fi
+  printf '%s' "$value"
+}
+
+env_file_get() {
+  local file="$1" key="$2" line candidate value
+  [ -f "$file" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="$(trim "$line")"
+    case "$line" in
+      ''|\#*) continue ;;
+      export[[:space:]]*) line="$(trim "${line#export}")" ;;
+    esac
+    case "$line" in
+      *=*) ;;
+      *) continue ;;
+    esac
+    candidate="$(trim "${line%%=*}")"
+    if [ "$candidate" = "$key" ]; then
+      value="${line#*=}"
+      strip_simple_quotes "$value"
+      return 0
+    fi
+  done < "$file"
+  return 1
+}
+
+env_file_keys() {
+  local file="$1" line key
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="$(trim "$line")"
+    case "$line" in
+      ''|\#*) continue ;;
+      export[[:space:]]*) line="$(trim "${line#export}")" ;;
+    esac
+    case "$line" in
+      *=*) ;;
+      *) continue ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    if valid_key "$key"; then
+      printf '%s\n' "$key"
+    fi
+  done < "$file"
+}
+
+resolve_key() {
+  local key="$1" repo_dir="$2" value
+  RESOLVED_SOURCE=""
+  RESOLVED_VALUE=""
+  if [ "${!key+x}" = "x" ]; then
+    RESOLVED_SOURCE="process"
+    RESOLVED_VALUE="${!key}"
+    return 0
+  fi
+  if value="$(env_file_get "$(project_env_file "$repo_dir")" "$key")"; then
+    RESOLVED_SOURCE="project"
+    RESOLVED_VALUE="$value"
+    return 0
+  fi
+  if value="$(env_file_get "$(project_dotenv_file "$repo_dir")" "$key")"; then
+    RESOLVED_SOURCE="env"
+    RESOLVED_VALUE="$value"
+    return 0
+  fi
+  if value="$(env_file_get "$(global_env_file)" "$key")"; then
+    RESOLVED_SOURCE="global"
+    RESOLVED_VALUE="$value"
+    return 0
+  fi
+  return 1
+}
+
+mask_value() {
+  local value="$1" len="${#1}"
+  if [ "$len" -gt 4 ]; then
+    printf '...%s' "${value: -4}"
+  else
+    printf '****'
+  fi
+}
+
+registry_summary() {
+  case "$1" in
+    LINEAR_API_KEY)
+      echo "LINEAR_API_KEY: Linear API key for beads-linear-sync. Recommended scope: project."
+      ;;
+    *)
+      echo "$1: unregistered key. Scope depends on the consumer."
+      ;;
+  esac
+}
+
+known_registry_keys() {
+  printf '%s\n' LINEAR_API_KEY
+}
+
+add_unique_key() {
+  local key="$1" existing
+  valid_key "$key" || return 0
+  for existing in "${KEYS[@]}"; do
+    [ "$existing" = "$key" ] && return 0
+  done
+  KEYS+=("$key")
+}
+
+split_required_names() {
+  local raw="$1" item
+  raw="${raw//,/ }"
+  for item in $raw; do
+    item="$(trim "$item")"
+    if valid_key "$item"; then
+      printf '%s\n' "$item"
+    fi
+  done
+}
+
+profile_required_keys() {
+  local repo_dir="$1" resolved line raw profile
+  if [ -x "$PROFILE_RESOLVER" ] && resolved="$("$PROFILE_RESOLVER" --repo "$repo_dir" 2>/dev/null)"; then
+    line="$(printf '%s\n' "$resolved" | sed -n 's/^FLYWHEEL_ENV_REQUIRED=//p' | head -1)"
+    if [ -n "$line" ]; then
+      raw="$(strip_simple_quotes "$line")"
+      split_required_names "$raw"
+      return 0
+    fi
+  fi
+
+  profile="$repo_dir/.flywheel/profile"
+  [ -f "$profile" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line="$(trim "$line")"
+    case "$line" in
+      FLYWHEEL_ENV_REQUIRED=*)
+        raw="${line#FLYWHEEL_ENV_REQUIRED=}"
+        raw="$(strip_simple_quotes "$raw")"
+        split_required_names "$raw"
+        return 0
+        ;;
+    esac
+  done < "$profile"
+}
+
+parse_repo_arg() {
+  PARSED_ARGS=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --repo)
+        [ "$#" -ge 2 ] || { usage; exit 2; }
+        repo="$2"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        while [ "$#" -gt 0 ]; do
+          PARSED_ARGS+=("$1")
+          shift
+        done
+        ;;
+      --*)
+        usage
+        exit 2
+        ;;
+      *)
+        PARSED_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+}
+
+upsert_env_file() {
+  local file="$1" key="$2" value="$3" tmp dir replaced=0 line candidate
+  dir="$(dirname "$file")"
+  mkdir -p "$dir"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/flywheel-env.XXXXXX")"
+  if [ -f "$file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      candidate="$line"
+      candidate="${candidate%$'\r'}"
+      candidate="$(trim "$candidate")"
+      case "$candidate" in
+        export[[:space:]]*) candidate="$(trim "${candidate#export}")" ;;
+      esac
+      if [ "$(trim "${candidate%%=*}")" = "$key" ] && [ "$candidate" != "${candidate%%=*}" ]; then
+        printf '%s=%s\n' "$key" "$value" >> "$tmp"
+        replaced=1
+      else
+        printf '%s\n' "$line" >> "$tmp"
+      fi
+    done < "$file"
+  fi
+  if [ "$replaced" -eq 0 ]; then
+    printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  fi
+  mv "$tmp" "$file"
+  chmod 600 "$file"
+}
+
+confirm_default_yes() {
+  local prompt="$1" answer
+  printf '%s [Y/n] ' "$prompt" >&2
+  IFS= read -r answer
+  case "$answer" in
+    ''|y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_project_gitignore() {
+  local repo_dir="$1" gitignore="$repo_dir/.gitignore"
+  if [ -f "$gitignore" ] && grep -Fxq ".flywheel/env.local" "$gitignore"; then
+    return 0
+  fi
+  if confirm_default_yes "Add .flywheel/env.local to .gitignore?"; then
+    touch "$gitignore"
+    if [ -s "$gitignore" ] && [ "$(tail -c 1 "$gitignore" 2>/dev/null || true)" != "" ]; then
+      printf '\n' >> "$gitignore"
+    fi
+    printf '%s\n' ".flywheel/env.local" >> "$gitignore"
+  else
+    echo "warning: .flywheel/env.local is not gitignored" >&2
+  fi
+}
+
+cmd_get() {
+  local repo_dir key
+  local -a args
+  parse_repo_arg "$@"
+  args=("${PARSED_ARGS[@]}")
+  [ "${#args[@]}" -eq 1 ] || { usage; exit 2; }
+  key="${args[0]}"
+  valid_key "$key" || { echo "flywheel-env: invalid key: $key" >&2; exit 2; }
+  repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
+  if resolve_key "$key" "$repo_dir"; then
+    printf '%s\n' "$RESOLVED_VALUE"
+  else
+    echo "flywheel-env: $key is unresolved; set it with: flywheel-env set $key --repo $repo_dir" >&2
+    exit 1
+  fi
+}
+
+cmd_check() {
+  local repo_dir key status=0 required
+  local -a args
+  parse_repo_arg "$@"
+  args=("${PARSED_ARGS[@]}")
+  repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
+  if [ "${#args[@]}" -eq 0 ]; then
+    while IFS= read -r required; do
+      args+=("$required")
+    done < <(profile_required_keys "$repo_dir")
+  fi
+  if [ "${#args[@]}" -eq 0 ]; then
+    echo "no required keys"
+    return 0
+  fi
+  for key in "${args[@]}"; do
+    valid_key "$key" || { echo "$key MISSING invalid-key"; status=1; continue; }
+    if resolve_key "$key" "$repo_dir"; then
+      printf '%s %s\n' "$key" "$RESOLVED_SOURCE"
+    else
+      printf '%s MISSING\n' "$key"
+      status=1
+    fi
+  done
+  return "$status"
+}
+
+cmd_list() {
+  local args repo_dir key active source value found
+  local -a args
+  parse_repo_arg "$@"
+  args=("${PARSED_ARGS[@]}")
+  [ "${#args[@]}" -eq 0 ] || { usage; exit 2; }
+  repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
+
+  KEYS=()
+  while IFS= read -r key; do add_unique_key "$key"; done < <(known_registry_keys)
+  while IFS= read -r key; do add_unique_key "$key"; done < <(profile_required_keys "$repo_dir")
+  while IFS= read -r key; do add_unique_key "$key"; done < <(env_file_keys "$(project_env_file "$repo_dir")")
+  while IFS= read -r key; do add_unique_key "$key"; done < <(env_file_keys "$(project_dotenv_file "$repo_dir")")
+  while IFS= read -r key; do add_unique_key "$key"; done < <(env_file_keys "$(global_env_file)")
+
+  printf '%-32s %-10s %-6s %s\n' "KEY" "SOURCE" "ACTIVE" "LAST4"
+  for key in "${KEYS[@]}"; do
+    active=""
+    if resolve_key "$key" "$repo_dir"; then
+      active="$RESOLVED_SOURCE"
+    fi
+    found=0
+    for source in process project env global; do
+      case "$source" in
+        process)
+          if [ "${!key+x}" = "x" ]; then value="${!key}"; else continue; fi
+          ;;
+        project)
+          if value="$(env_file_get "$(project_env_file "$repo_dir")" "$key")"; then :; else continue; fi
+          ;;
+        env)
+          if value="$(env_file_get "$(project_dotenv_file "$repo_dir")" "$key")"; then :; else continue; fi
+          ;;
+        global)
+          if value="$(env_file_get "$(global_env_file)" "$key")"; then :; else continue; fi
+          ;;
+      esac
+      found=1
+      if [ "$source" = "$active" ]; then
+        printf '%-32s %-10s %-6s %s\n' "$key" "$source" "yes" "$(mask_value "$value")"
+      else
+        printf '%-32s %-10s %-6s %s\n' "$key" "$source" "no" "$(mask_value "$value")"
+      fi
+    done
+    if [ "$found" -eq 0 ]; then
+      printf '%-32s %-10s %-6s %s\n' "$key" "missing" "no" "****"
+    fi
+  done
+}
+
+cmd_set() {
+  local repo_dir key global_value choice target value
+  local -a args
+  parse_repo_arg "$@"
+  args=("${PARSED_ARGS[@]}")
+  [ "${#args[@]}" -le 1 ] || { usage; exit 2; }
+  if [ ! -t 0 ] || [ ! -t 1 ]; then
+    echo "flywheel-env set is human-interactive; agents use flywheel-env get/check and must not hang." >&2
+    exit 3
+  fi
+  repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
+  if [ "${#args[@]}" -eq 1 ]; then
+    key="${args[0]}"
+  else
+    printf 'Key: ' >&2
+    IFS= read -r key
+  fi
+  valid_key "$key" || { echo "flywheel-env: invalid key: $key" >&2; exit 2; }
+
+  registry_summary "$key" >&2
+  if global_value="$(env_file_get "$(global_env_file)" "$key")"; then
+    echo "Global value exists for $key: $(mask_value "$global_value")" >&2
+    printf '[r]eplace global, [p]roject-level override, [a]bort: ' >&2
+    IFS= read -r choice
+    case "$choice" in
+      r|R) target="global" ;;
+      p|P) target="project" ;;
+      *) echo "aborted" >&2; return 0 ;;
+    esac
+  else
+    printf 'Store [g]lobal or [p]roject-level for this repo? ' >&2
+    IFS= read -r choice
+    case "$choice" in
+      g|G) target="global" ;;
+      p|P) target="project" ;;
+      *) echo "aborted" >&2; return 0 ;;
+    esac
+  fi
+
+  printf 'Enter value for %s: ' "$key" >&2
+  IFS= read -r -s value
+  printf '\n' >&2
+  [ -n "$value" ] || { echo "flywheel-env: empty values are not accepted" >&2; exit 2; }
+
+  case "$target" in
+    global)
+      upsert_env_file "$(global_env_file)" "$key" "$value"
+      echo "Stored $key globally ($(global_env_file), chmod 600)." >&2
+      ;;
+    project)
+      mkdir -p "$repo_dir/.flywheel"
+      upsert_env_file "$(project_env_file "$repo_dir")" "$key" "$value"
+      ensure_project_gitignore "$repo_dir"
+      echo "Stored $key for this repo ($repo_dir/.flywheel/env.local, chmod 600)." >&2
+      ;;
+  esac
+}
+
+main() {
+  [ "$#" -ge 1 ] || { usage; exit 2; }
+  local cmd="$1"
+  shift
+  case "$cmd" in
+    set) cmd_set "$@" ;;
+    get) cmd_get "$@" ;;
+    check) cmd_check "$@" ;;
+    list) cmd_list "$@" ;;
+    -h|--help|help) usage ;;
+    *) usage; exit 2 ;;
+  esac
+}
+
+main "$@"
