@@ -35,6 +35,7 @@ worktrees="false"
 precommit="light"
 prepush="full"
 projection_app=""
+env_required=""
 pm="none"
 
 warn_invalid() {
@@ -52,6 +53,22 @@ parse_profile_value() {
   value="${line#"$key"=}"
   value="${value%%#*}"
   trim "$value"
+}
+
+valid_env_required() {
+  local value="$1" part
+  local -a parts
+  [ -n "$value" ] || return 0
+  IFS=',' read -r -a parts <<< "$value"
+  for part in "${parts[@]}"; do
+    part="$(trim "$part")"
+    case "$part" in
+      ""|[0-9]*|*[!A-Za-z0-9_]*)
+        return 1
+        ;;
+    esac
+  done
+  return 0
 }
 
 apply_profile_line() {
@@ -91,6 +108,14 @@ apply_profile_line() {
         ""|linear) projection_app="$value" ;;
         *) warn_invalid "FLYWHEEL_PROJECTION_APP" "$value" "$projection_app" ;;
       esac
+      ;;
+    FLYWHEEL_ENV_REQUIRED=*)
+      value="$(parse_profile_value "$line" "FLYWHEEL_ENV_REQUIRED")"
+      if valid_env_required "$value"; then
+        env_required="$value"
+      else
+        warn_invalid "FLYWHEEL_ENV_REQUIRED" "$value" "$env_required"
+      fi
       ;;
   esac
 }
@@ -145,4 +170,5 @@ printf 'FLYWHEEL_WORKTREES=%s\n' "$(quote_value "$worktrees")"
 printf 'FLYWHEEL_PRECOMMIT=%s\n' "$(quote_value "$precommit")"
 printf 'FLYWHEEL_PREPUSH=%s\n' "$(quote_value "$prepush")"
 printf 'FLYWHEEL_PROJECTION_APP=%s\n' "$(quote_value "$projection_app")"
+printf 'FLYWHEEL_ENV_REQUIRED=%s\n' "$(quote_value "$env_required")"
 printf 'FLYWHEEL_PM=%s\n' "$(quote_value "$pm")"

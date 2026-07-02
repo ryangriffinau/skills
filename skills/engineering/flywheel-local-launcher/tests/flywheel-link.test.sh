@@ -83,6 +83,7 @@ assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_MODE=team" "team scaffo
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PRECOMMIT=light" "team scaffold precommit"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PREPUSH=full" "team scaffold prepush"
 assert_file_contains "$repo/.flywheel/profile" "FLYWHEEL_PROJECTION_APP=" "team scaffold projection"
+assert_file_contains "$repo/.flywheel/profile" "# FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY" "team scaffold env required example"
 assert_output_contains "$SETUP_OUT" ".flywheel/profile (mode=team, pm=pnpm, pre_commit=light)" "team summary"
 
 repo="$(new_repo heavy_repo)"
