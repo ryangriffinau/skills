@@ -1,0 +1,24 @@
+{
+ "ts": 1,
+ "session": "s",
+ "epic": "e",
+ "last_commits": [],
+ "config_warning": true,
+ "progress": {
+  "closed": 0,
+  "total": 5
+ },
+ "in_progress": [
+  "e.1"
+ ],
+ "ready": [],
+ "blocked": [],
+ "panes": [
+  {
+   "idx": 1,
+   "title": "s__cod_1",
+   "state": "working",
+   "working_secs": 30
+  }
+ ]
+}

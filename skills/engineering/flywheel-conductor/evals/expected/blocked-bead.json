@@ -1,0 +1,9 @@
+{
+ "all_clear": false,
+ "exceptions": [
+  {
+   "guard": "G3",
+   "bead": "e.2"
+  }
+ ]
+}

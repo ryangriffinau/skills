@@ -1,0 +1,10 @@
+{
+ "all_clear": false,
+ "exceptions": [
+  {
+   "guard": "G8",
+   "pane": 1,
+   "needs_conductor": true
+  }
+ ]
+}
