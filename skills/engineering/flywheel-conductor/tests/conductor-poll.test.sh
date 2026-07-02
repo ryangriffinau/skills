@@ -21,7 +21,14 @@ case "$1" in
   capture-pane)
     case "$*" in
       *":0.1"*) printf '• Editing files\n• Working (2m 5s • esc to interrupt)\n  gpt-5.5 high\n' ;;
-      *":0.2"*) printf 'zsh: parse error near\nuser:repo/ (branch*) $ \n' ;;
+      *":0.2"*)
+        if [ "${MOCK_RESTART_PANE:-}" = "1" ]; then
+          printf 'Update ran successfully\nPlease restart Codex\nuser:repo/ (branch*) $                 [20:55:57]\n'
+        elif [ "${MOCK_TIMESTAMP_PROMPT:-}" = "1" ]; then
+          printf 'user:repo/ (branch*) $                 [20:55:57]\n'
+        else
+          printf 'zsh: parse error near\nuser:repo/ (branch*) $ \n'
+        fi ;;
     esac ;;
 esac
 EOF
@@ -32,8 +39,23 @@ cat >"$MOCK/br" <<'EOF'
 [ "${MOCK_BR_FAIL:-}" = "1" ] && exit 1
 for a in "$@"; do
   case "$a" in
-    list)  printf '[{"id":"e","status":"open"},{"id":"e.1","status":"closed"},{"id":"e.2","status":"in_progress"},{"id":"e.3","status":"blocked"},{"id":"e.4","status":"open"},{"id":"other-x","status":"open"}]\n'; exit 0 ;;
-    ready) printf '[{"id":"e.4"},{"id":"other-x"}]\n'; exit 0 ;;
+    list)
+      if [ "${MOCK_SLUG_CHILDREN:-}" = "1" ]; then
+        printf '[{"id":"e","status":"open"},{"id":"cert-one-aaa","parent":"e","status":"closed"},{"id":"cert-two-bbb","parent_id":"e","status":"closed"},{"id":"cert-three-ccc","epic_id":"e","status":"in_progress"},{"id":"other-x","status":"open"}]\n'
+      else
+        printf '[{"id":"e","status":"open"},{"id":"e.1","status":"closed"},{"id":"e.2","status":"in_progress"},{"id":"e.3","status":"blocked"},{"id":"e.4","status":"open"},{"id":"other-x","status":"open"}]\n'
+      fi
+      exit 0 ;;
+    ready)
+      if [ "${MOCK_SLUG_CHILDREN:-}" = "1" ]; then
+        printf '[{"id":"cert-three-ccc"},{"id":"other-x"}]\n'
+      else
+        printf '[{"id":"e.4"},{"id":"other-x"}]\n'
+      fi
+      exit 0 ;;
+    show)
+      printf '[{"id":"e","status":"open","dependents":[{"id":"cert-one-aaa","dependency_type":"parent-child"},{"id":"cert-two-bbb","dependency_type":"parent-child"},{"id":"cert-three-ccc","dependency_type":"parent-child"},{"id":"other-blocker","dependency_type":"blocks"}]}]\n'
+      exit 0 ;;
   esac
 done
 exit 0
@@ -78,6 +100,37 @@ print("happy-path ok")
 out="$(MOCK_NTM_WARN=1 run_poll)"
 echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["config_warning"] is True; print("config-warning ok")' \
   || fail "config_warning not surfaced"
+
+# --- slug-id children scope by parent/dependents, not dotted id format ---
+out="$(MOCK_SLUG_CHILDREN=1 run_poll)"
+echo "$out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert d["progress"] == {"closed": 2, "total": 3}, "slug progress: %s" % d["progress"]
+assert d["in_progress"] == ["cert-three-ccc"], "slug in_progress: %s" % d["in_progress"]
+assert d["ready"] == ["cert-three-ccc"], "slug ready: %s" % d["ready"]
+print("slug-children ok")
+' || fail "slug-id children assertions"
+
+# --- shell prompt survives trailing timestamp/padding ---
+out="$(MOCK_TIMESTAMP_PROMPT=1 run_poll)"
+echo "$out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+p = {x["idx"]: x for x in d["panes"]}
+assert p[2]["state"] == "shell", "timestamp prompt pane2: %s" % p[2]
+print("timestamp-shell ok")
+' || fail "timestamp shell assertions"
+
+# --- Codex update/restart banner is distinct from plain shell ---
+out="$(MOCK_RESTART_PANE=1 run_poll)"
+echo "$out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+p = {x["idx"]: x for x in d["panes"]}
+assert p[2]["state"] == "needs_restart", "restart pane2: %s" % p[2]
+print("needs-restart ok")
+' || fail "needs_restart assertions"
 
 # --- exit 3 on missing session (G13) ---
 set +e

@@ -37,6 +37,10 @@ if ! beads_json="$(br --db "$db" --allow-stale list --json 2>/dev/null)"; then
 fi
 [ -n "$beads_json" ] || exit 4
 ready_json="$(br --db "$db" --allow-stale ready --json 2>/dev/null || echo '[]')"
+epic_json="[]"
+if [ -n "$epic" ]; then
+  epic_json="$(br --db "$db" --allow-stale show "$epic" --json 2>/dev/null || echo '[]')"
+fi
 
 # --- panes: index|title plus a tail capture per pane ---
 panes_meta="$(tmux list-panes -t "$session" -F '#{pane_index}|#{pane_title}' 2>/dev/null || true)"
@@ -64,7 +68,7 @@ if printf '%s' "$cfg_out" | grep -qi "config load failed"; then
 fi
 
 export POLL_SESSION="$session" POLL_EPIC="$epic" POLL_CONFIG_WARNING="$config_warning"
-export POLL_BEADS_JSON="$beads_json" POLL_READY_JSON="$ready_json"
+export POLL_BEADS_JSON="$beads_json" POLL_READY_JSON="$ready_json" POLL_EPIC_JSON="$epic_json"
 export POLL_PANE_DUMP="$pane_dump" POLL_COMMITS="$commits"
 
 python3 <<'PY'
@@ -86,12 +90,46 @@ if isinstance(rows, dict):
 ready_rows = load("POLL_READY_JSON", [])
 if isinstance(ready_rows, dict):
     ready_rows = ready_rows.get("issues") or ready_rows.get("data") or []
+epic_rows = load("POLL_EPIC_JSON", [])
+if isinstance(epic_rows, dict):
+    epic_rows = epic_rows.get("issues") or epic_rows.get("data") or [epic_rows]
 
 def rid(r):
     return str(r.get("id", ""))
 
+def field_id(value):
+    if isinstance(value, dict):
+        return str(value.get("id", ""))
+    if value is None:
+        return ""
+    return str(value)
+
+parent_fields = ("parent", "parent_id", "epic", "epic_id")
+epic_child_ids = set()
+for er in epic_rows:
+    if not isinstance(er, dict):
+        continue
+    for child in er.get("dependents") or er.get("children") or []:
+        if not isinstance(child, dict):
+            continue
+        dep_type = str(child.get("dependency_type", "parent-child"))
+        if dep_type in ("parent-child", "child", ""):
+            cid = rid(child)
+            if cid:
+                epic_child_ids.add(cid)
+
+def is_child_of_epic(r):
+    if epic is None:
+        return True
+    if rid(r) in epic_child_ids:
+        return True
+    for field in parent_fields:
+        if field_id(r.get(field)) == epic:
+            return True
+    return rid(r).startswith(epic + ".")
+
 def in_scope(r):
-    return epic is None or rid(r) == epic or rid(r).startswith(epic + ".")
+    return epic is None or rid(r) == epic or is_child_of_epic(r)
 
 scoped = [r for r in rows if isinstance(r, dict) and in_scope(r)]
 children = [r for r in scoped if epic is None or rid(r) != epic]
@@ -127,7 +165,9 @@ for block in blocks:
     else:
         last = [l for l in tail.splitlines() if l.strip()]
         tail_txt = "\n".join(last[-4:]) if last else ""
-        if re.search(r"(\$|%)\s*$", tail_txt) or "parse error" in tail_txt:
+        if re.search(r"Please restart Codex|Update ran successfully", tail_txt, re.I):
+            state = "needs_restart"
+        elif re.search(r"(?m)^[^\n]*[$%]\s*(?:\[[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?\]\s*)?$", tail_txt) or "parse error" in tail_txt:
             state = "shell"
         elif re.search(r"error|ERR", tail_txt) and "esc to interrupt" not in tail_txt:
             state = "error"

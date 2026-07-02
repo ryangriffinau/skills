@@ -8,7 +8,7 @@
 #   G2  config_warning true
 #   G3  blocked beads present (candidate — conductor verifies the cause)
 #   G6  ready > 0, nothing in_progress, and no agent pane working
-#   G7  pane state shell/error (dead or errored agent)
+#   G7  pane state shell/error/needs_restart (dead, errored, or update-stopped agent)
 #   G8  pane working past threshold (CANDIDATE ONLY — judgment call; --llm escalates via
 #       one-shot `codex exec`, else needs_conductor:true. The conductor, not this script,
 #       decides deep-work-vs-tangent.)
@@ -60,6 +60,10 @@ if poll.get("config_warning"):
 for p in agent_panes:
     if p.get("state") == "shell":
         exc("G7", "pane %s (%s) dropped to a shell" % (p["idx"], p.get("title", "")),
+            "ntm respawn --panes=%s --force, then re-feed the kickoff prompt" % p["idx"],
+            pane=p["idx"])
+    elif p.get("state") == "needs_restart":
+        exc("G7", "pane %s (%s) needs a Codex restart" % (p["idx"], p.get("title", "")),
             "ntm respawn --panes=%s --force, then re-feed the kickoff prompt" % p["idx"],
             pane=p["idx"])
     elif p.get("state") == "error":
