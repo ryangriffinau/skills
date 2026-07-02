@@ -14,7 +14,7 @@ Prepares a single local repo for Jeffrey Emanuel's Agent Flywheel and maintains 
 or drive swarms (that is the **flywheel-conductor** skill, which consumes this skill's
 `flywheel-profile.sh` + `flywheel-kickoff.sh` output),
 and it does NOT bootstrap a machine (remote/Linux machines use Emanuel's ACFS; macOS uses
-the per-tool `install.sh` list — see `references/cheatsheet.md` §3).
+the per-tool `install.sh` list — see `references/setup.md` §A.1).
 
 ## When to use
 - Onboarding a new repo to the flywheel ("set up `<repo>` for the flywheel").
