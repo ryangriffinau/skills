@@ -191,3 +191,19 @@ session (either app, any teammate) claims the expired lease and continues from t
 **Evidence:** AT session — the user forked the session; the background timer died with no
 completion record; the swarm ran unconducted (reached 86% on momentum, but the endgame
 gate sat blocked until the next manual poll noticed).
+
+## G14 — ship-bead-gating
+
+**Signal:** A ship/release bead is ready while workers are still live; both a worker and
+the conductor claim or perform ship actions on the same branch; duplicate PRs or merge
+attempts appear.
+**Diagnosis:** The ship bead is ordinary ready work to workers, but it is also the
+conductor's natural endgame concern. Without a graph or session gate, both can race and
+perform release actions against the same branch.
+**Fix:** Before the conductor does any claimable ship-bead work, make ownership explicit:
+either add a conductor-held blocker/hold dependency so workers cannot claim it, or verify
+the swarm is stopped/no live worker can claim it. If a worker already owns ship, do not race
+it — let the worker finish and the conductor only verifies the result.
+**Evidence:** Skills conductor dogfood 2026-07-02 — after reality-check closed, the ship
+bead unblocked and a live worker opened/merged a PR while the conductor opened/merged a
+parallel PR for the same branch; benign only because the second PR carried beads state.

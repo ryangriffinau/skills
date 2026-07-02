@@ -66,8 +66,10 @@ wake-up: zero unhandled exceptions, journal appended. Loop exits when: epic 100%
 or a documented external block is handed to the user.*
 
 **5 — Endgame + teardown.** Reality-check and ship close as beads through the normal loop.
-Then `ntm kill` + `ntm cleanup`, release the lease, final journal line. *Done when: no live
-session; PR link (or the exact block) reported.*
+Before the conductor performs any claimable ship-bead work, gate that bead from workers or
+confirm no live worker can claim it; otherwise let a worker own ship and only verify (G14).
+Then `ntm kill` + `ntm cleanup`, release the lease, final journal line. *Done when: no
+live session; PR link (or the exact block) reported.*
 
 **6 — Write-back.** For every journal `lesson` with `guard_matched: null`: instantiate
 [assets/candidate-guard.md](assets/candidate-guard.md) (if `cass` is available, attach
@@ -95,6 +97,7 @@ Full playbook — signal, diagnosis, fix, evidence: [references/guards.md](refer
 | Two workers inside one high-blast-radius chain | G11 serial-chains |
 | DCG blocks a clever one-liner | G12 simple-commands |
 | Swarm alive, conductor lease expired | G13 conductor-survivability |
+| Conductor and worker both touch the ship bead | G14 ship-bead-gating |
 
 ## Certify
 
