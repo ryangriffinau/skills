@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flywheel-conductor/journal-line",
+  "title": "Conductor journal line",
+  "description": "Validates ONE line of .flywheel/runtime/journal.jsonl (append-only, machine-local, gitignored). The conductor lease is NOT stored here — it is an Agent Mail file reservation on .flywheel/CONDUCTOR. Secrets: key names only, never values.",
+  "type": "object",
+  "required": ["type", "ts"],
+  "properties": {
+    "type": { "enum": ["checkin", "lesson", "certification"] },
+    "ts": { "type": "integer", "description": "unix seconds" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "type": { "const": "checkin" },
+        "session": { "type": "string" },
+        "epic": { "type": "string" },
+        "progress": {
+          "type": "object",
+          "properties": { "closed": { "type": "integer" }, "total": { "type": "integer" } },
+          "required": ["closed", "total"]
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["guard"],
+            "properties": {
+              "guard": { "type": "string", "pattern": "^G[0-9]+" },
+              "pane": { "type": "integer" },
+              "bead": { "type": "string" },
+              "evidence": { "type": "string" },
+              "recommended_action": { "type": "string" }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "what the conductor actually did this wake-up"
+        }
+      },
+      "required": ["type", "ts", "session"]
+    },
+    {
+      "properties": {
+        "type": { "const": "lesson" },
+        "signal": { "type": "string", "description": "what was observed" },
+        "guard_matched": {
+          "type": ["string", "null"],
+          "description": "existing guard id, or null = novel failure -> write-back candidate"
+        },
+        "intervention": { "type": "string" },
+        "outcome": { "type": "string" },
+        "evidence": { "type": "string", "description": "pointer: pane capture, bead id, commit, cass hit" }
+      },
+      "required": ["type", "ts", "signal", "guard_matched", "intervention", "outcome"]
+    },
+    {
+      "properties": {
+        "type": { "const": "certification" },
+        "eval_version": { "type": "string" },
+        "result": { "enum": ["pass", "fail"] }
+      },
+      "required": ["type", "ts", "eval_version", "result"]
+    }
+  ]
+}
