@@ -37,11 +37,21 @@ EOF
 cat >"$MOCK/br" <<'EOF'
 #!/usr/bin/env bash
 [ "${MOCK_BR_FAIL:-}" = "1" ] && exit 1
+has_all=false
+for arg in "$@"; do
+  [ "$arg" = "--all" ] && has_all=true
+done
 for a in "$@"; do
   case "$a" in
     list)
       if [ "${MOCK_SLUG_CHILDREN:-}" = "1" ]; then
         printf '[{"id":"e","status":"open"},{"id":"cert-one-aaa","parent":"e","status":"closed"},{"id":"cert-two-bbb","parent_id":"e","status":"closed"},{"id":"cert-three-ccc","epic_id":"e","status":"in_progress"},{"id":"other-x","status":"open"}]\n'
+      elif [ "${MOCK_CLOSED_ONLY_WITH_ALL:-}" = "1" ]; then
+        if $has_all; then
+          printf '[{"id":"e","status":"open"},{"id":"e.1","status":"closed"},{"id":"e.2","status":"in_progress"},{"id":"e.3","status":"closed"},{"id":"e.4","status":"open"},{"id":"other-x","status":"open"}]\n'
+        else
+          printf '[{"id":"e","status":"open"},{"id":"e.2","status":"in_progress"},{"id":"e.4","status":"open"},{"id":"other-x","status":"open"}]\n'
+        fi
       else
         printf '[{"id":"e","status":"open"},{"id":"e.1","status":"closed"},{"id":"e.2","status":"in_progress"},{"id":"e.3","status":"blocked"},{"id":"e.4","status":"open"},{"id":"other-x","status":"open"}]\n'
       fi
@@ -100,6 +110,17 @@ print("happy-path ok")
 out="$(MOCK_NTM_WARN=1 run_poll)"
 echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["config_warning"] is True; print("config-warning ok")' \
   || fail "config_warning not surfaced"
+
+# --- closed beads are visible only through br list --all ---
+out="$(MOCK_CLOSED_ONLY_WITH_ALL=1 run_poll)"
+echo "$out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert d["progress"] == {"closed": 2, "total": 4}, "all-progress: %s" % d["progress"]
+assert d["in_progress"] == ["e.2"], "all in_progress: %s" % d["in_progress"]
+assert d["ready"] == ["e.4"], "all ready: %s" % d["ready"]
+print("list-all-closed ok")
+' || fail "list --all closed visibility assertions"
 
 # --- slug-id children scope by parent/dependents, not dotted id format ---
 out="$(MOCK_SLUG_CHILDREN=1 run_poll)"

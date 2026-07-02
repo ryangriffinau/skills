@@ -32,7 +32,7 @@ fi
 
 # --- beads reachability (exit 4 if unreadable) ---
 beads_json=""
-if ! beads_json="$(br --db "$db" --allow-stale list --json 2>/dev/null)"; then
+if ! beads_json="$(br --db "$db" --allow-stale list --all --json 2>/dev/null)"; then
   exit 4
 fi
 [ -n "$beads_json" ] || exit 4
