@@ -56,8 +56,10 @@ repo_dir="$(cd "$(dirname "$db")/.." && pwd)"
 commits="$(git -C "$repo_dir" log --oneline -5 2>/dev/null || true)"
 
 # --- ntm config health (guard G2) ---
+# capture first: `grep -q` on a live pipe SIGPIPEs ntm under pipefail (flaky miss)
 config_warning=false
-if ntm config show 2>&1 | grep -qi "config load failed"; then
+cfg_out="$(ntm config show 2>&1 || true)"
+if printf '%s' "$cfg_out" | grep -qi "config load failed"; then
   config_warning=true
 fi
 
