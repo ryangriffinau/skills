@@ -40,7 +40,10 @@ log(){ printf 'certify: %s\n' "$1"; }
 # ---------- sandbox ----------
 stamp="$(date +%s)"
 session="fwcert$stamp"
-sandbox="${TMPDIR:-/tmp}/$session"
+# physical path: macOS $TMPDIR is a symlink (/var -> /private/var) and beads refuses
+# symlinked roots ("points outside beads directory")
+tmp_phys="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
+sandbox="$tmp_phys/$session"
 mkdir -p "$sandbox"
 log "sandbox: $sandbox (session: $session)"
 
