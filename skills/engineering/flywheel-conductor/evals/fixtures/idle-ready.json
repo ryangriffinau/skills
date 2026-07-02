@@ -1,0 +1,29 @@
+{
+ "ts": 1,
+ "session": "s",
+ "epic": "e",
+ "last_commits": [],
+ "config_warning": false,
+ "progress": {
+  "closed": 2,
+  "total": 5
+ },
+ "in_progress": [],
+ "ready": [
+  "e.4",
+  "e.5"
+ ],
+ "blocked": [],
+ "panes": [
+  {
+   "idx": 1,
+   "title": "s__cod_1",
+   "state": "idle"
+  },
+  {
+   "idx": 2,
+   "title": "s__cod_2",
+   "state": "idle"
+  }
+ ]
+}

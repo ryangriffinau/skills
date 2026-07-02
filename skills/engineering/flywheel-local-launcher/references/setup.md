@@ -43,6 +43,12 @@ auto_assign = true   # keep feeding ready beads to idle agents (without this the
 ```
 Set `projects_base` with `ntm config set projects-base ~/Code/github`.
 
+> **⚠ Config parsing is all-or-nothing (conductor guard G2):** ONE unknown field makes ntm
+> reject the ENTIRE file and silently fall back to built-in defaults — codex **xhigh** and
+> the default `projects_base`. Classic trap: `default_claude` belongs under `[models]`,
+> **never** `[agents]`. After any edit verify `ntm config show` prints **no warning**; and
+> running agents never pick up config changes — kill + respawn the session.
+
 ### 4. Learn `bv` (do this — the tutorial is excellent)
 `bv` is your **work dashboard**. **Humans run bare `bv`** (an interactive TUI of the whole bead graph) — *not* `bv --robot-*`, which is JSON/TOON for *agents*. Run `bv` once and walk its built-in tutorial; thereafter it's how you watch progress instead of re-typing `br epic status`.
 
@@ -114,11 +120,11 @@ FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=linear
 ```
 
-When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv`:
+When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the manual epic→Linear-project map (create/choose the Linear project yourself, paste its id, commit it):
 ```text
-platform-monorepo-kwf	lin_prj_AbC123
+customer-template-architecture-transfer-w7o	c538d7a2-a7bd-4474-a4d9-8d024d4478de
 ```
-This is the manual epic-to-project map: create or choose the Linear project yourself, paste its project id here, and commit the mapping. The projector computes JSON operations from Beads plus this TSV, but applying them is done later by a human or controller session with the Linear MCP.
+Then **apply the projection** with the runnable, idempotent `scripts/beads-linear-sync --repo .` — export a `LINEAR_API_KEY` (a Linear *personal* key from Settings → API; any team member can make one, no Claude/MCP session needed). It posts a Linear project **status update** carrying the epic's beads progress **only when the % changed** (safe to re-run or put on a hook), and it **never mirrors child beads to Linear issues** — Linear stays a project-level roadmap view. Fail-open: a missing key or an API error logs and continues.
 
 ## C. The projects model + the one-path rule
 

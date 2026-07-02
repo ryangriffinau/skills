@@ -1,0 +1,8 @@
+{
+ "all_clear": false,
+ "exceptions": [
+  {
+   "guard": "G6"
+  }
+ ]
+}

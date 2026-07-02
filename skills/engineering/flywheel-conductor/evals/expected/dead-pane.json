@@ -1,0 +1,9 @@
+{
+ "all_clear": false,
+ "exceptions": [
+  {
+   "guard": "G7",
+   "pane": 2
+  }
+ ]
+}

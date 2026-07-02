@@ -54,9 +54,10 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
 | [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.2 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
-| [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.1.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
+| [flywheel-conductor](skills/engineering/flywheel-conductor) | ⚪ | 0.1.0 | agents, flywheel, swarm | Drive a flywheel swarm from your own agent session — poll → triage → act → journal, with a 13-guard playbook |
+| [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.3.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
 
-> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`, `flywheel-local-launcher`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
+> Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`, `flywheel-local-launcher`, `flywheel-conductor`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
 
 ## Prompts
 
