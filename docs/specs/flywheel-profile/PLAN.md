@@ -1,8 +1,13 @@
 # Flywheel Profile — Implementation Plan (v2)
 
+> **2026-07-03 reconciliation note:** the deprecated `beads-linear-projector` asset was
+> deleted with user authorization. Its per-child Linear issue upsert model is superseded by
+> the project-level `beads-linear-sync`, which posts idempotent Linear project updates and
+> never mirrors child beads to Linear issues.
+
 > A per-repo `.flywheel/profile` (flat, shell-sourceable) that is the single declarative
 > contract for a repo's flywheel behavior. Scaffolded deterministically by `fw setup`, read
-> **only at the edges** (kickoff generator, ship bead, issue-projection) and **never** by the
+> **only at the edges** (kickoff generator, ship bead, project sync) and **never** by the
 > core `br`/`bv`/Agent-Mail loop. **Absence of the file = pure flywheel/Emmanuel defaults.**
 > Lives in `ryangriffinau/skills` (the `flywheel-local-launcher` skill); adopted by
 > `platform-monorepo` + `customer-template`.
@@ -12,7 +17,7 @@
 > split into compute (anywhere) + apply (MCP context); skill assets run **from** the skill (only
 > the lease guard is copied into a repo); ship bead **baked at encode time**; explicit
 > relationship to existing beads `skills-ogi.8/.9/.10`; kickoff uses the bash resolver (no `jq`);
-> generator emits the **full** launch recipe (spawn + controller + readiness note).
+> generator emits the **full** launch recipe (spawn + readiness note).
 
 ## 1. Goal & intent
 Every per-repo *variable* in the flywheel — collaboration mode (solo/team), package manager, gate
@@ -23,8 +28,8 @@ and the ship behavior is mode-correct. It **never gates the core loop**: a repo 
 runs the pure flywheel (Emmanuel's solo-on-main baseline).
 
 ## 2. Design principles (binding)
-1. **Decoupled.** Only three consumers read the profile: the kickoff generator, the ship bead, the
-   projector. `br`/`bv`/Agent-Mail/lease-guard/`cass`/`ubs` never do.
+1. **Decoupled.** Only three consumers read the profile: the kickoff generator, the ship bead, and
+   project sync. `br`/`bv`/Agent-Mail/lease-guard/`cass`/`ubs` never do.
 2. **Absence = Emmanuel defaults.** No `.flywheel/profile` → `mode=solo`, `worktrees=false`,
    `pre_commit=light`, `pre_push=full`, no projection. Never an error.
 3. **Deterministic.** Same repo state → same scaffold, same resolution. No prompts/network/randomness.
@@ -47,11 +52,11 @@ runs the pure flywheel (Emmanuel's solo-on-main baseline).
             │  eval "$(flywheel-profile.sh --repo DIR)"
    ┌────────┼─────────────────────────┐
    ▼        ▼                          ▼
- flywheel-  p-plan-to-beads        beads-linear-projector (COMPUTE)
- kickoff.sh  SHIP bead (mode baked     reads projects.tsv -> emits linearMcp ops (JSON), no MCP
+ flywheel-  p-plan-to-beads        beads-linear-sync (PROJECT UPDATE)
+ kickoff.sh  SHIP bead (mode baked     reads projects.tsv -> posts Linear project updates
  (gen full   at ENCODE time)           │
-  launch                               ▼  APPLY (separate; needs the tracker MCP)
-  recipe)                          run by the human / Claude controller (NOT Codex workers)
+  launch                               ▼  APPLY (Linear GraphQL API, fail-open)
+  recipe)                          run by the ship bead / conductor endgame / human
 
    CORE LOOP (br/bv/Agent-Mail/guard/cass/ubs) ── never reads the profile ──
 ```
@@ -114,11 +119,10 @@ Run **from the skill**: `flywheel-kickoff.sh <session> --plan <path> [--cod N=3]
      team → "final ship bead opens a PR ready + merges when green", solo → "commit to the working
      branch, no PR"; always ONE shared tree / NEVER worktrees; if `PRECOMMIT=heavy`, "do the
      hook-align bead first");
-  2. the **controller recipe**: `ntm controller <session>` then the `tmux send-keys -t
-     <session>:0.<pane> "<brief>"` + Enter (NOT `ntm send` — it mangles Claude prompts to `[Image]`);
-  3. the **readiness note**: if `0/N ready`, respawn cod + re-send the kickoff + `coordinator assign`.
+  2. the **readiness note**: if `0/N ready`, recover dead Codex panes per the conductor guard and
+     nudge workers to self-claim ready beads.
 - **Quoting:** every profile-derived value is shell-quoted; the init-prompt is one safely-quoted arg.
-- Does **not** spawn itself (keeps `fw` minimal; human runs the printed commands + the controller step).
+- Does **not** spawn itself (keeps `fw` minimal; human/conductor runs the printed command).
 
 ## 8. Mode-aware ship bead — `prompts/p-plan-to-beads.md` (runner-up 2)
 The prompt already mandates a final reality-check bead + a ship bead. Refine: at **encode time**,
@@ -130,23 +134,20 @@ instructions into the ship bead's text (self-contained bead; no runtime profile 
   opens the PR ready (+ enables auto-merge if the repo supports it) and lets CI/the human complete.
 - No profile → `solo`. Use the detected package manager for verify commands.
 
-## 9. Issue-projection — `app="linear"` (= `skills-ogi.10`), compute/apply split
-- **COMPUTE** (runs anywhere, no MCP): the projector script reads beads + `.flywheel/projects.tsv`
-  and emits the deterministic `linearMcp` ops as JSON (existing `beads-linear-projector` logic,
-  re-pointed from epic-metadata to `projects.tsv`). Runs from the skill with `--repo`.
-- **APPLY** (separate; needs the tracker MCP): an agent **with the Linear MCP** applies the ops —
-  realistically the **human or the Claude controller**, **not** the Codex workers (non-interactive
-  Codex lacks the interactively-authed Linear MCP). 
-- **Trigger (MVP, decoupled):** projection runs as a **final sync in the ship bead** (executed by the
-  MCP-holder), not a per-close loop step. Per-close live updates are a documented future option.
-- **Failure (locked):** `FLYWHEEL_PROJECTION_APP` set but the tracker not connected/authed, or an
-  unknown app → **log a visible error and CONTINUE** (never block). Empty/absent → silent no-op.
+## 9. Project sync — `app="linear"` (= `skills-ogi.10`)
+- **SYNC** (runs anywhere with `LINEAR_API_KEY`): `beads-linear-sync` reads beads +
+  `.flywheel/projects.tsv` and posts idempotent Linear **project updates** with epic progress.
+  It does not emit or apply per-child issue operations.
+- **Trigger (MVP, decoupled):** projection runs as a **final sync in the ship bead**, conductor
+  endgame, or a human/manual command, not a per-close loop step.
+- **Failure (locked):** `FLYWHEEL_PROJECTION_APP` set but auth/API is missing, or an unknown app →
+  **log a visible error and CONTINUE** (never block). Empty/absent → silent no-op.
 
 ## 10. Asset placement (fix #3 — binding)
 - **Copied into a repo:** only `scripts/ci/file-reservation-guard.sh` (it's a git hook).
 - **Scaffolded into a repo (committed config):** `.flywheel/profile` (+ `.flywheel/projects.tsv` if used).
 - **Run FROM the skill** (`bash <skill>/scripts/… --repo <repo>`): `flywheel-profile.sh` (resolver),
-  `flywheel-kickoff.sh` (generator), `beads-linear-projector` (projector COMPUTE).
+  `flywheel-kickoff.sh` (generator), `beads-linear-sync` (project-level Linear sync).
 
 ## 11. Documentation
 - **`references/setup.md`** — new "Flywheel Profile" section: the flat-shell schema, every field +
@@ -170,9 +171,9 @@ instructions into the ship bead's text (self-contained bead; no runtime profile 
   **no** Python/tomli check). Leave as-is.
 - **`skills-ogi.9` (heavy-pre-commit warn):** **subsumed** by §6 (the `pre_commit` detection + the
   scaffold warning). Fold into the setup-scaffolding unit; close `.9` as superseded.
-- **`skills-ogi.10` (portable opt-in Linear projection):** **subsumed** by §9 (issue-projection
-  `app=linear`, compute/apply split, `projects.tsv`). The projection units ARE `.10`; continue it,
-  don't create a parallel bead.
+- **`skills-ogi.10` (portable opt-in Linear projection):** **subsumed** by §9 (`app=linear`,
+  project-level sync, `projects.tsv`). The projection units ARE `.10`; continue it, don't create a
+  parallel bead.
 
 ## 14. Work decomposition (units → beads)
 | Unit | Owns (files) | Deps | Note |
@@ -181,7 +182,7 @@ instructions into the ship bead's text (self-contained bead; no runtime profile 
 | **U2 Setup scaffold** | `scripts/flywheel-link.sh` (`scaffold_profile`) | U1 | subsumes `skills-ogi.9` |
 | **U3 Kickoff generator** | `scripts/flywheel-kickoff.sh` (+ tests) | U1 | full launch recipe |
 | **U4 Ship-bead prompt** | `prompts/p-plan-to-beads.md` | U1 | bake mode at encode |
-| **U5 Issue-projection** | `beads-linear-projector` asset + `projects.tsv` read | U1 | = `skills-ogi.10` |
+| **U5 Project sync** | `beads-linear-sync` asset + `projects.tsv` read | U1 | = `skills-ogi.10` |
 | **U6 Docs** | `references/setup.md`, `references/cheatsheet.md` | U1–U5 | |
 | **U7 Adopt** | `.flywheel/profile`(+`.tsv`) in platform + customer-template | U2 | manual project ids |
 | **U8 Verify+ship** | broad reality-check + ship bead | U1–U7 | |
@@ -190,33 +191,33 @@ DAG: U1 → {U2,U3,U5}; U4←U1; U6←U1–U5; U7←U2; U8←all. Parallel after
 ## 15. Edge cases & failure modes
 No profile → Emmanuel defaults, no error. Non-JS repo → `PM=none`; consumers omit pm commands.
 Unknown/invalid key value → warn-to-stderr + keep default (never silent-wrong, never crash).
-`team` without husky/CI → valid. Projection set but MCP absent / unknown app → log + continue.
+`team` without husky/CI → valid. Projection set but auth/API absent or unknown app → log + continue.
 Outside a git repo → defaults + `PM=none`. Partial profile → per-field defaults.
 
 ## 16. Security & correctness
 No secrets in the config. Resolver **parses known keys** (no `source`/eval of repo content).
 Kickoff generator shell-quotes every profile-derived value (one quoted init-prompt arg; no
-injection). Resolver + projector COMPUTE are read-only + network-free. `projects.tsv` holds ids
-only (project ids aren't secret; the tracker token stays in the MCP/env).
+injection). Resolver is read-only + network-free. `projects.tsv` holds ids only (project ids aren't
+secret; the tracker token stays in env via `flywheel-env` / `LINEAR_API_KEY`).
 
 ## 17. Testing strategy
 - **U1:** valid profile parses; absent → Emmanuel defaults; invalid value → warn+default; pm detection
   for each case; outside-git → defaults; `--repo` honored.
-- **U3:** snapshot — given a profile, the emitted spawn line + controller recipe + readiness note match
-  expected for solo/team × pnpm/bun; quoting holds for values with spaces/quotes.
+- **U3:** snapshot — given a profile, the emitted spawn line + readiness note match expected for
+  solo/team × pnpm/bun; quoting holds for values with spaces/quotes.
 - **U4:** the encoded ship bead text reflects `mode` (solo vs team) + detected pm.
-- **U5:** COMPUTE maps epic→project from `projects.tsv` + emits ops; MCP-absent/unknown-app → exit 0 +
-  logged; empty app → no-op.
+- **U5:** sync maps epic→project from `projects.tsv` + posts project updates idempotently;
+  auth/API missing or unknown app → exit 0 + logged; empty app → no-op.
 - **U7:** both repos' profiles resolve; `flywheel-kickoff.sh` produces a valid recipe for each.
 
 ## 18. Acceptance criteria (per unit)
 - **U1:** `flywheel-profile.sh --repo X` emits correct `FLYWHEEL_*` for present/absent/invalid/partial
   profiles + every pm case; tests green; no `source` of repo content.
 - **U2:** `fw setup` writes a correct `.flywheel/profile` (scaffold defaults); idempotent; heavy warn fires.
-- **U3:** emits a single-line, correctly-quoted, mode+pm-aware spawn + controller recipe + readiness note.
+- **U3:** emits a single-line, correctly-quoted, mode+pm-aware spawn recipe + readiness note.
 - **U4:** freshly-encoded ship bead matches the repo's `mode`; team bead does not block-poll CI.
-- **U5:** COMPUTE produces ops from `projects.tsv`; error-and-continues when the tracker is unavailable;
-  APPLY is documented as the MCP-holder's step.
+- **U5:** sync maps epic→project from `projects.tsv` + posts project updates idempotently;
+  auth/API missing or unknown app → exit 0 + logged; empty app → no-op.
 - **U6:** setup.md documents schema/defaults/absence=Emmanuel/examples; cheatsheet points at the generator
   + mode-aware ship; raw spawn kept as fallback.
 - **U7:** both repos carry a valid `.flywheel/profile`, merged via team PR flow.
@@ -230,15 +231,15 @@ only (project ids aren't secret; the tracker token stays in the MCP/env).
 - **A `fw spawn`/`fw doctor` verb** — rejected: `fw` stays `link/setup/list`; the generator is a script
   the human runs, keeping the human in the loop for the spawn + controller-pane step.
 - **A profile↔repo hard self-check** — rejected (user): `team` without husky is valid; projection errors-and-continues.
-- **Projector applying ops inside the Codex swarm** — rejected: Codex lacks the interactive tracker MCP;
-  apply runs where the MCP is (human/Claude). Compute/apply are split.
+- **Projection inside the Codex worker loop** — rejected: projection is a project-level endgame/manual
+  sync, not worker-owned per-bead work.
 - **`[linear]`** — generalized to `FLYWHEEL_PROJECTION_APP` so other trackers plug in via a simple switch
   (no plugin framework; only `linear` exists today).
 - **The core loop reading the profile** — rejected: would couple `br`/`bv`/Agent-Mail to team features.
 
 ## 20. Assumptions (check)
 - `bash` + coreutils + `git` are present (already flywheel prerequisites). No Python needed.
-- The Linear projector asset from `skills-ogi.10` exists/continues to satisfy U5's COMPUTE.
+- The Linear project sync asset from `skills-ogi.10` exists/continues to satisfy U5.
 - Repos are git repos with a remote when `mode` scaffolds to `team`.
 - The profile is committed (per-repo config, not local-only).
 - Mapping a new epic→project in `projects.tsv` is **manual** (the user creates the Linear project +
