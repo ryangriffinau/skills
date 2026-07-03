@@ -357,7 +357,7 @@ verify() {
   fi
   ( cd "${dest:-$path}" 2>/dev/null || cd "$path"
     if [ -d .beads ]; then echo "  ✓ beads initialised (.beads/)"; else echo "  ✗ no .beads/ — run: flywheel-link.sh setup"; fi
-    n="$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b')"
+    n="$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b' || true)"
     if [ "${n:-0}" -ge 1 ]; then
       echo "  ✓ ${n} bead(s) present — run 'bv', claim one, close it to prove the loop"
     else
