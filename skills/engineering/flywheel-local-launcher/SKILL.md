@@ -46,7 +46,8 @@ Run the bundled script `scripts/flywheel-link.sh` from inside the target repo:
 |---|---|
 | `preflight` | Verify stack installed (ntm, agent-mail, br, bv, dcg, cass, ubs, claude, codex) + Agent Mail server on `:8765` + `projects_base` set; report each gap with its fix |
 | `link [path]` | Symlink a repo (default: cwd) into `projects_base` under its basename |
-| `setup [path]` | `link` + `br init` + `ntm init` + `ntm guards install`, then check AGENTS.md |
+| `setup [path]` | `link` + `br init` (+ a starter **verification bead**) + `ntm init` + lease guard + `.flywheel/profile`, check AGENTS.md, then run `verify` |
+| `verify [path]` | **Success test** — confirm the repo is linked into `projects_base` (so `ntm spawn` resolves it) AND holds a completable bead; the proof the flywheel is live here. (`ntm list` shows active *sessions*, not linked projects — a repo can be flywheel-ready with no running swarm.) |
 | `list` | List projects currently linked into `projects_base` |
 
 Typical onboarding, from inside the repo:
