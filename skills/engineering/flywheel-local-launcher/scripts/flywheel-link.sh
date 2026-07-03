@@ -321,6 +321,15 @@ setup() {
   # keys this repo under ONE project, matching `ntm spawn <name>`. See references/setup.md §C.
   ( cd "${dest:-$path}"
     echo "==> br init";         br init   || echo "  (br init skipped/failed — already initialised?)"
+    echo "==> verification bead"
+    if [ "$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b')" = "0" ]; then
+      br create "Flywheel verification: prove the loop end-to-end" --type task --priority 3 \
+        --description "Setup smoke test (flywheel-local-launcher). Claim this bead, make a trivial change (touch a scratch file or tweak a comment), run 'ubs --staged --fail-on-warning', then 'br close' it. If claim -> change -> close works, the flywheel loop is live in this repo. Safe to delete afterward." >/dev/null 2>&1 \
+        && echo "  + starter verification bead created (run 'bv' to see it, then claim + close it)" \
+        || echo "  (br create skipped/failed)"
+    else
+      echo "  = beads already present; not adding a starter bead"
+    fi
     echo "==> ntm init";        ntm init  || echo "  (ntm init skipped/failed)"
     echo "==> lease guard";     install_guard
     echo "==> .flywheel/profile"; scaffold_profile
@@ -333,6 +342,33 @@ setup() {
     fi
     echo "==> AGENTS.md check"; agents_md_check
   )
+  verify "$path"
+}
+
+# Success test: prove the repo is flywheel-ready — resolvable by ntm AND holding a completable bead.
+verify() {
+  local path="${1:-.}" abs b name dest ok=1 n
+  abs="$(cd "$path" && pwd)"; b="$(base)"; name="$(basename "$abs")"; dest="$b/$name"
+  echo "==> verification — is '$name' flywheel-ready?"
+  if [ -L "$dest" ] || [ -d "$dest" ]; then
+    echo "  ✓ linked into projects_base ($dest) — 'ntm spawn $name' will resolve it"
+  else
+    echo "  ✗ NOT linked into projects_base — run: flywheel-link.sh link"; ok=0
+  fi
+  ( cd "${dest:-$path}" 2>/dev/null || cd "$path"
+    if [ -d .beads ]; then echo "  ✓ beads initialised (.beads/)"; else echo "  ✗ no .beads/ — run: flywheel-link.sh setup"; fi
+    n="$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b')"
+    if [ "${n:-0}" -ge 1 ]; then
+      echo "  ✓ ${n} bead(s) present — run 'bv', claim one, close it to prove the loop"
+    else
+      echo "  ⚠ no beads yet — create one with: br create \"<title>\" --type task"
+    fi
+  )
+  if [ "$ok" = 1 ]; then
+    echo "  ✅ SUCCESS: '$name' is flywheel-ready. Success test = 'bv' shows a bead AND 'ntm spawn $name' launches a swarm on it."
+  else
+    echo "  ❌ INCOMPLETE — resolve the ✗ above, then re-run: flywheel-link.sh verify"
+  fi
 }
 
 list() {
@@ -344,6 +380,7 @@ case "${1:-preflight}" in
   preflight) preflight ;;
   link)  shift; link  "${1:-.}" ;;
   setup) shift; setup "${1:-.}" ;;
+  verify) shift; verify "${1:-.}" ;;
   list)  list ;;
-  *) echo "usage: flywheel-link.sh {preflight | link [path] | setup [path] | list}" >&2; exit 2 ;;
+  *) echo "usage: flywheel-link.sh {preflight | link [path] | setup [path] | verify [path] | list}" >&2; exit 2 ;;
 esac
