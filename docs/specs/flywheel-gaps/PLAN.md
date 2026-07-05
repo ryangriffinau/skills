@@ -92,6 +92,10 @@ via the sync's auth probe.*
   to commit it as part of setup — so it can never appear mid-swarm on a tracked file.
 *Acceptance (the new setup completion criterion): after setup on a lint-enforcing fixture
 repo, `git status` shows only intended files and the repo's own linter passes.*
+**Plus (reality-check H2): the lease guard must soft-pass with a one-line warning on
+machines WITHOUT the flywheel stack** — platform's `.husky/pre-commit` now runs
+`file-reservation-guard.sh` for every contributor, including teammates who never install
+Agent Mail; verify + test the stack-absent path so ordinary commits are never blocked.
 
 ### V4 — Case A decommission checklist (docs)
 The Onboarding section's Case A gains an explicit **retire-the-old-system** step with an
@@ -174,11 +178,17 @@ Five reports (T1–T5), each diagnosed with a red repro before planning:
   a doc.* → **V12**: (a) `preflight` exits non-zero on any failed check; (b) `setup`
   aborts with "run bootstrap first" when preflight is red; (c) new **`bootstrap`**
   command — runs the §A.1 per-tool installers (macOS install.sh list; ACFS pointer on
-  Linux), wires Agent Mail, seeds `~/.config/ntm/config.toml` (`projects_base`, codex
-  effort=high, `auto_assign`), runs `cass index`, re-runs preflight to green;
+  Linux) with per-installer confirmation, then **makes Agent Mail actually usable: start
+  the server (+ keep-running guidance), verify `:8765` answers, write/print the exact
+  Codex `mcp_servers` bearer block** (reality-check H1 — every lease and guard depends on
+  it), seeds `~/.config/ntm/config.toml` (`projects_base`, codex effort=high,
+  `auto_assign`), runs `cass index`, re-runs preflight to green;
   (d) SKILL.md's "Local only" rule **revised** — machine bootstrap in scope, interactive
   confirmation before each installer; (e) tests: preflight exit codes under stripped
-  PATH; setup-aborts-on-red.
+  PATH; setup-aborts-on-red. (f) **Acceptance is a REAL fresh machine** (reality-check):
+  a second team member or a clean macOS user account walks install → bootstrap → setup →
+  verify to green, unassisted — stripped-PATH tests simulate a fresh machine; only a real
+  one proves the journey.
 - **T5 (Ryan) projection team var:** one API key can span multiple Linear teams; project
   creation needs a team. → fold into **V2 + the profile schema**: new
   `FLYWHEEL_PROJECTION_TEAM` (Linear team id/key) in `.flywheel/profile`, emitted by the
