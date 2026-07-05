@@ -4,7 +4,7 @@ status: drafting
 version: 0.3.0
 tags: [agents, flywheel, orchestration, setup]
 updated: 2026-07-01
-description: Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, runs per-repo init, and routes onboarding by first detecting an existing workflow system: Case A migration vs Case B greenfield setup.
+description: "Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, runs per-repo init, and routes onboarding by first detecting an existing workflow system: Case A migration vs Case B greenfield setup."
 ---
 
 # Flywheel local launcher
