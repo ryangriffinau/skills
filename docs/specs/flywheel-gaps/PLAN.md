@@ -49,7 +49,7 @@ Everything else is open and covered below.
 | Unit | Gaps | Owns | Deps |
 |---|---|---|---|
 | **V1 Projection reads real parent metadata** | **#10 (P1, top risk)** | `scripts/beads-linear-sync`, `tests/beads-linear-sync.test.sh` | — |
-| **V2 `beads-linear-map` helper** | #11, #12 | new `scripts/beads-linear-map`, `tests/beads-linear-map.test.sh`, setup.md §projection | — |
+| **V2 `beads-linear-map` helper** | #11, #12, T5 | new `scripts/beads-linear-map` + test, `scripts/flywheel-profile.sh` + test (`FLYWHEEL_PROJECTION_TEAM`), setup.md §projection | — |
 | **V3 `setup` absorbs repo-integration** | #1 (P1), #3, #4, #5 | `scripts/flywheel-link.sh`, `tests/flywheel-link.test.sh` | — |
 | **V4 Case A decommission checklist** | #6 (P1) | launcher `SKILL.md` (Onboarding §), cheatsheet §2 | — |
 | **V5 Conductor ordering + encode-time gating** | #13 (P1), #14 (P1)+G15+`skills-yb0`, #15, #17b, #18 | conductor `SKILL.md`, `references/commands.md`, `references/guards.md`, `assets/worker-kickoff.md`, `prompts/p-agent-swarm-launcher.md`, `prompts/p-plan-to-beads.md` (gating clause) | — |
@@ -57,7 +57,7 @@ Everything else is open and covered below.
 | **V7 DCG upstream report** | #17a | draft GitHub issue (post only with user approval) | — |
 | **V8 Install-staleness defense** | `skills-4bq`, meta-cause of #2/#19 reappearing | `scripts/flywheel-link.sh` preflight (staleness probe), setup.md §Updating | V3 |
 | **V11 Skills-repo CI (the teammate's "main issue")** | T2 | `.github/workflows/ci.yml` (new), `scripts/lint-skills` (new) | — |
-| **V12 `bootstrap` + honest exit codes** | T4 | `scripts/flywheel-link.sh` (bootstrap + preflight/setup exits), launcher `SKILL.md` (Rules), setup.md §A — *shares flywheel-link.sh with V3/V8 (serial)* | V3 |
+| **V12 `bootstrap` + honest exit codes** | T4 (+ `verify` exit-0, found in fresh-eyes) | `scripts/flywheel-link.sh` (bootstrap + preflight/setup/verify exits), launcher `SKILL.md` (Rules), setup.md §A — *shares flywheel-link.sh with V3/V8 (serial)* | V8 |
 | **V13 platform-monorepo remediation** (beads live in platform's tracker) | T1, T3 | platform: `.backpocket` audit→archive, `.ntm` untrack+gitignore | V4 |
 | **V9 Broad reality-check** | closer | — | all |
 | **V10 Ship** (team: PR ready → merge green → refresh installs — via the V8-documented reliable path) | closer | — | V9 |
@@ -159,14 +159,17 @@ Five reports (T1–T5), each diagnosed with a red repro before planning:
   parse with a real YAML parser and carry name+description (the exact class that
   shipped); (b) `bash -n` every script; (c) run all `tests/*.test.sh`; (d) shellcheck
   when present; (e) triage the CLI's "Critical Risk — 1 alert" on the launcher (likely
-  the curl|bash bootstrap lines) and document or remediate.
+  the curl|bash bootstrap lines) and document or remediate; (f) require a `version:` bump
+  when a PR changes a skill's files (today's `verify` addition shipped with no bump).
 - **T3 `.ntm/config.toml` committed with a machine-local path** (`agent_mail_project_key
   = /Users/rgbrgy/…`): confirmed tracked in platform. → **V13**: `git rm --cached` the
   `.ntm/` dir + gitignore (untrack, never delete — RULE 1); prevention going forward is
   V3's gitignore step in setup.
-- **T4 `setup` dies uselessly without ntm:** the teammate hit exit 127 (stale pre-#8
-  copy); **current main fails differently and worse** — repro: `preflight` exits **0**
-  with every tool missing; `setup` exits **0** having changed nothing (silent no-op).
+- **T4 `setup` dies uselessly without ntm:** the teammate hit exit 127 on a stale
+  pre-hardening copy (unupdatable *because of* T-YAML); **current main fails differently
+  and worse** — repro: `preflight` exits **0** with every tool missing; `setup` exits
+  **0** having changed nothing (silent no-op); and fresh-eyes found `verify` exits **0**
+  after printing `❌ INCOMPLETE` — the same class in code written *today*.
   Design intent now explicit: *preflight/setup must complete machine setup, not point at
   a doc.* → **V12**: (a) `preflight` exits non-zero on any failed check; (b) `setup`
   aborts with "run bootstrap first" when preflight is red; (c) new **`bootstrap`**
