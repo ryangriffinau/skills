@@ -56,6 +56,9 @@ Everything else is open and covered below.
 | **V6 Exact `br` reference + resolver path** | #7, #8, #9 | launcher `references/cheatsheet.md` (flag table), `prompts/p-plan-to-beads.md` (path) — *coordinate with V5's p-plan-to-beads edit (serial dep)* | V5 |
 | **V7 DCG upstream report** | #17a | draft GitHub issue (post only with user approval) | — |
 | **V8 Install-staleness defense** | `skills-4bq`, meta-cause of #2/#19 reappearing | `scripts/flywheel-link.sh` preflight (staleness probe), setup.md §Updating | V3 |
+| **V11 Skills-repo CI (the teammate's "main issue")** | T2 | `.github/workflows/ci.yml` (new), `scripts/lint-skills` (new) | — |
+| **V12 `bootstrap` + honest exit codes** | T4 | `scripts/flywheel-link.sh` (bootstrap + preflight/setup exits), launcher `SKILL.md` (Rules), setup.md §A — *shares flywheel-link.sh with V3/V8 (serial)* | V3 |
+| **V13 platform-monorepo remediation** (beads live in platform's tracker) | T1, T3 | platform: `.backpocket` audit→archive, `.ntm` untrack+gitignore | V4 |
 | **V9 Broad reality-check** | closer | — | all |
 | **V10 Ship** (team: PR ready → merge green → refresh installs — via the V8-documented reliable path) | closer | — | V9 |
 
@@ -134,11 +137,57 @@ staleness probe: when the canonical repo exists locally, compare installed SKILL
 bug — the direct-copy fallback) and the verify-vs-certify routing (#19): `verify` =
 seconds, per-repo readiness; `certify` = minutes, real-agent proof, first conduct only.
 
+## 2b. Team-feedback addendum (platform-monorepo teammate run, 2026-07-03)
+
+Five reports (T1–T5), each diagnosed with a red repro before planning:
+
+- **T-YAML (FIXED during diagnosis — PR #8):** the skills CLI said "No valid skills found"
+  for `flywheel-local-launcher` only — the U8 description's **unquoted `: `**
+  (`…workflow system: Case A…`) is an invalid YAML plain scalar, so the CLI silently
+  skips the skill. Quoted (review-council precedent); fresh isolated install verified
+  green with all scripts. **One root cause, four symptoms:** the teammate's blocked
+  install, this session's `npx update` "✗ Failed" + broken `remove/add` (`skills-4bq`),
+  and kingfield's stale setup. V8 therefore shrinks: re-test `npx skills update`
+  post-fix; keep the copy-fallback documentation only if a deletion bug still reproduces.
+- **T1 `.backpocket` partially live in platform:** 18 tracked files remain (`evals/`,
+  `orchestrator/`, `website-generation/`) — PR #531's keep/replace/archive map missed
+  them. → **V13** (platform beads): audit references first (evals data may be consumed by
+  live code — possibly *why* it survived), archive what is dead, keep-with-comment what
+  is live. V4's decommission checklist applied retroactively to the first repo.
+- **T2 "insufficient linting/tests — a basic issue":** correct — nothing gates this repo.
+  → **V11** GitHub Actions on PR + main: (a) `scripts/lint-skills` — frontmatter must
+  parse with a real YAML parser and carry name+description (the exact class that
+  shipped); (b) `bash -n` every script; (c) run all `tests/*.test.sh`; (d) shellcheck
+  when present; (e) triage the CLI's "Critical Risk — 1 alert" on the launcher (likely
+  the curl|bash bootstrap lines) and document or remediate.
+- **T3 `.ntm/config.toml` committed with a machine-local path** (`agent_mail_project_key
+  = /Users/rgbrgy/…`): confirmed tracked in platform. → **V13**: `git rm --cached` the
+  `.ntm/` dir + gitignore (untrack, never delete — RULE 1); prevention going forward is
+  V3's gitignore step in setup.
+- **T4 `setup` dies uselessly without ntm:** the teammate hit exit 127 (stale pre-#8
+  copy); **current main fails differently and worse** — repro: `preflight` exits **0**
+  with every tool missing; `setup` exits **0** having changed nothing (silent no-op).
+  Design intent now explicit: *preflight/setup must complete machine setup, not point at
+  a doc.* → **V12**: (a) `preflight` exits non-zero on any failed check; (b) `setup`
+  aborts with "run bootstrap first" when preflight is red; (c) new **`bootstrap`**
+  command — runs the §A.1 per-tool installers (macOS install.sh list; ACFS pointer on
+  Linux), wires Agent Mail, seeds `~/.config/ntm/config.toml` (`projects_base`, codex
+  effort=high, `auto_assign`), runs `cass index`, re-runs preflight to green;
+  (d) SKILL.md's "Local only" rule **revised** — machine bootstrap in scope, interactive
+  confirmation before each installer; (e) tests: preflight exit codes under stripped
+  PATH; setup-aborts-on-red.
+- **T5 (Ryan) projection team var:** one API key can span multiple Linear teams; project
+  creation needs a team. → fold into **V2 + the profile schema**: new
+  `FLYWHEEL_PROJECTION_TEAM` (Linear team id/key) in `.flywheel/profile`, emitted by the
+  resolver, used by `beads-linear-map` as the `projectCreate` default (`--team`
+  overrides). Absent + `--create` → clear error naming the exact profile line to add.
+
 ## 3. Sequencing
 
-Parallel roots: V1, V2, V3, V4, V5, V7 · V6←V5 (shared p-plan-to-beads file) · V8←V3
-(shared flywheel-link.sh) · V9←all · V10←V9. Worker-able: V1, V2, V3, V6, V8 (script+test
-units). Conductor-inline: V4, V5 (skill-of-the-conductor edits), V7 (user approval), V9,
+Parallel roots: V1, V2, V3, V4, V5, V7, V11 · V6←V5 (shared p-plan-to-beads file) ·
+V8←V3 and V12←V8 (flywheel-link.sh chain: V3→V8→V12, serial) · V13←V4 (checklist first,
+then apply in platform) · V9←all · V10←V9. Worker-able: V1, V2, V3, V6, V8, V11, V12
+(script+test units). Conductor-inline: V4, V5, V7 (user approval), V13 (other repo), V9,
 V10. **Per G15: conductor-inline units get their HOLD dep at encode time.**
 
 ## 4. Acceptance (whole plan)
