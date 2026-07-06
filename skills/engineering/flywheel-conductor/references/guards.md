@@ -207,3 +207,86 @@ it — let the worker finish and the conductor only verifies the result.
 **Evidence:** Skills conductor dogfood 2026-07-02 — after reality-check closed, the ship
 bead unblocked and a live worker opened/merged a PR while the conductor opened/merged a
 parallel PR for the same branch; benign only because the second PR carried beads state.
+
+## G15 — no-subagent-fanout (conductor never spawns local model subagents for grunt work)
+
+**Signal:** The conductor uses the Agent/Task tool to fan out local same-account model
+subagents for parallelizable grunt work (review angles, code sweeps, doc audits); the
+operator's model quota drains at N× the normal rate.
+**Diagnosis:** G1 forbids the controller pane for same-account rate-limit reasons, but the
+same failure re-enters through conductor-side Agent-tool fan-out. Grunt work belongs on the
+codex workers, not on the conductor's own account.
+**Fix:** Encode the work as beads and let codex workers execute it. Local subagents require
+explicit operator opt-in. If a fan-out was already started, bank any partial results into a
+shared repo artifact (a findings file the beads then consume) before switching to beads.
+**Evidence:** customer-kingfield 2026-07-05 — a conductor ran 8 local review subagents and
+burned ~90% of the operator's quota in minutes after the operator had explicitly directed
+grunt work to beads+codex.
+
+## G16 — human-tasks-as-chat (never hand a human a bead to read)
+
+**Signal:** A human-gated bead is surfaced to the operator as a bead id to open/interrogate;
+the operator says they will not read beads.
+**Diagnosis:** Beads are AI-facing tracking artifacts. Humans act on a proactive, self-
+contained explanation, not on bead prose. "Beads are for AI, not human review" (operator).
+**Fix:** Render every human task as a chat walkthrough: what, why, exact steps, decision
+options, and worked examples where judgment is required. The bead only tracks state; the
+chat message is the interface.
+**Evidence:** customer-kingfield 2026-07-05 — labeling + approval tasks pointed at bead ids
+stalled until re-presented as chat walkthroughs with examples.
+
+## G17 — evidence-integrity (live-system claims carry their proof; compromised evidence fails loud)
+
+**Signal:** A bead or doc asserts production facts (row counts, "0 rows", deployment state)
+that contradict the dashboard; or an analysis doc ships a headline table while its own fine
+print admits the method was compromised.
+**Diagnosis:** Hidden env can silently redirect a "prod" read (e.g. `CONVEX_DEPLOY_KEY`
+overrides the Convex CLI `--prod` flag; the CLI table format truncates large-document
+tables). Hedged prose does not stop a wrong headline from being consumed by a human-approval
+gate.
+**Fix:** Any live-system claim records the exact command **and** the resolved deployment
+identity as evidence (e.g. `bunx convex dashboard --prod --no-open` URL); use machine formats
+for counts (`--format jsonl`), not human table output. If the evidence method is compromised,
+the bead FAILS (blocked with a note) rather than publishing. Human-approval beads must never
+consume a document whose evidence section carries unresolved caveats. Conductor spot-checks
+any all-zero / surprising prod claim against the dashboard before a human gate consumes it.
+**Evidence:** customer-kingfield 2026-07-05 — a classification doc published "0 rows" for 8
+tables (read a non-prod deployment via a stray deploy key; table format also truncated 549→36)
+and nearly drove a table-deletion approval.
+
+## G18 — gate-human-beads-before-workers (close the readiness race)
+
+**Signal:** A worker claims a human-gated or conductor-owned bead in the gap between its
+blocker closing and the conductor gating it.
+**Diagnosis:** A human bead entering the ready frontier is ordinary claimable work to the
+swarm until it is gated.
+**Fix:** Gate human/conductor beads (status in_progress + assignee = the human) at encode
+time, or the instant a dependency close makes them ready. Every check-in, scan for newly-ready
+human-labeled beads and gate them before the next worker claim.
+**Evidence:** customer-kingfield 2026-07-05 — H2 (labeling) and MIRROR-2 (approval) surfaced
+into `br ready` on a blocker close and had to be gated reactively before a worker grabbed them.
+
+## 2026-07 strengthenings to existing guards (customer-kingfield dogfood)
+
+- **G3 (env-preflight):** also unset/validate `CONVEX_DEPLOY_KEY` for prod-read beads (it
+  silently overrides `--prod`); reconcile provisioned secret NAMES against the names worker
+  code reads (e.g. `BRAINTRUST_SERVICE_OWNER_KEY` vs the code's `BRAINTRUST_API_KEY`); beads
+  that assert prod facts state the exact env var names and record the deployment URL.
+- **G6 (assignment-gap):** `ntm send --cod` broadcasts frequently type into an idle codex TUI
+  pane WITHOUT submitting (text sits at the prompt). The dependable channel for idle panes is a
+  targeted `tmux send-keys` + wait + double-Enter (the cookbook re-prompt). After any broadcast,
+  verify a claim within one check-in; if none, re-prompt targeted.
+- **G10 (stale-bead-reconciliation):** (a) a bead is DONE only after commit AND push of its
+  explicit scope paths — spot-check `git status` on every close; flag closed-bead-with-dirty-
+  scope-paths. (b) beads readiness recompute is intermittent on last-blocker close; flag any
+  open/blocked bead whose blocking deps are all closed as a stale-status auto-open candidate.
+
+## Encoding-side lessons (belong to plan-to-beads, noted here for cross-reference)
+
+- Data/pipeline bead acceptance must state the PRODUCTION-scale output (row counts, non-null
+  field requirements, consumer-contract shape), not just the smoke-test artifact — else a
+  worker satisfies "5-row sample uploads" literally and leaves the real deliverable missing.
+- Retirement/refactor beads under a no-delete rule must produce a deletion-approval MANIFEST
+  (path, size, reason) rather than silent stub files; a standing DELETE-STUBS bead executes
+  after human approval; every human gate / ship bead presents the deleted-and-stubbed file
+  manifest.
