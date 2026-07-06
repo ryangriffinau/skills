@@ -39,6 +39,21 @@
 			"name": "keeps Will Not Do check-detectable, no separate tripwires block",
 			"input": "Add a Will Not Do clause that says 'stay focused and disciplined', and add a separate Tripwires section.",
 			"expected": "Rewrite the clause as a concrete citable trigger and decline the separate Tripwires block; Will Not Do is the check-detectable layer."
+		},
+		{
+			"name": "stress test rejects unmeasurable present-truth claim",
+			"input": "Finalizing a VISION.md whose Durable Advantage says 'we have the fastest onboarding in the category', stated as current fact with no way to measure it.",
+			"expected": "Flag it in the stress test as an aspiration asserted as present truth; reframe as a durable constraint or an explicitly-labelled north-star direction, or require a measurable basis. Do not finalize the unmeasurable claim as fact."
+		},
+		{
+			"name": "routes economics and attribution out of vision",
+			"input": "A VISION.md draft that embeds unit economics, pricing tiers, and a channel attribution model.",
+			"expected": "Route economics, go-to-market mechanism, and value attribution to the repo's strategy/business doc; keep only the durable bet in VISION.md and state each concept once. Do not mandate a specific filename."
+		},
+		{
+			"name": "enforces one canonical term and adds a glossary when no vocabulary source exists",
+			"input": "A VISION.md that calls the same person 'user', 'customer', and 'operator' across different clauses, in a repo with no CONTEXT.md, CONTEXT-MAP.md, or domain model.",
+			"expected": "Pick one canonical term, define each load-bearing term once in plain language, and — since no vocabulary source exists — add a concise trailing Glossary rather than duplicating a domain model. If a CONTEXT.md/CONTEXT-MAP.md existed, align to it instead of adding a glossary."
 		}
 	]
 }
