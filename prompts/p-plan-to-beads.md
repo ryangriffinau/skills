@@ -24,10 +24,36 @@ than leaving silent empty files behind.
 Before creating the final ship bead, resolve this repo's Flywheel Profile exactly once at encode time:
 
 ```bash
-eval "$(skills/engineering/flywheel-local-launcher/scripts/flywheel-profile.sh --repo .)"
+repo_resolver="skills/engineering/flywheel-local-launcher/scripts/flywheel-profile.sh"
+installed_resolver="$HOME/.claude/skills/flywheel-local-launcher/scripts/flywheel-profile.sh"
+resolved_profile=""
+
+if [ -x "$repo_resolver" ]; then
+  if resolved="$("$repo_resolver" --repo .)"; then
+    resolved_profile="$resolved"
+  fi
+fi
+
+if [ -z "$resolved_profile" ] && [ -x "$installed_resolver" ]; then
+  if resolved="$("$installed_resolver" --repo .)"; then
+    resolved_profile="$resolved"
+  fi
+fi
+
+if [ -n "$resolved_profile" ]; then
+  eval "$resolved_profile"
+else
+  FLYWHEEL_MODE=solo
+  FLYWHEEL_PM=none
+fi
 ```
 
-If the resolver is absent or fails, use the Emmanuel default for the final ship bead: `FLYWHEEL_MODE=solo` and `FLYWHEEL_PM=none`. Use the resolved `FLYWHEEL_MODE` and `FLYWHEEL_PM` to write complete, self-contained shipping instructions into the ship bead. Do not tell the future ship-bead agent to read `.flywheel/profile`; the mode-specific behavior must already be baked into the bead text.
+Try the repo-local resolver first, then the installed resolver under the user's Claude
+skills directory. If both are absent or both fail, use the Emmanuel
+default for the final ship bead: `FLYWHEEL_MODE=solo` and `FLYWHEEL_PM=none`. Use the
+resolved `FLYWHEEL_MODE` and `FLYWHEEL_PM` to write complete, self-contained shipping
+instructions into the ship bead. Do not tell the future ship-bead agent to read
+`.flywheel/profile`; the mode-specific behavior must already be baked into the bead text.
 
 **Always close the graph with two final beads, each depending on all implementation leaves:**
 1. A **broad reality-check** bead — not a scope-limited verify. It must: get build/typecheck/test green; run a **repo-wide** `grep -ri` for ANY stale/orphaned reference (not just the directories this plan touched); do a `/p-fresh-eyes-review` of the whole diff; and run `/p-reality-check` that the intended outcome actually exists with no residual artifacts. This catches out-of-scope leftovers (stale docs/ADRs, half-renamed references) that per-bead reviews miss because each only sees its own scope.
