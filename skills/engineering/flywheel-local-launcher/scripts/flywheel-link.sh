@@ -6,7 +6,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-base() { ntm config show 2>/dev/null | sed -n 's/^projects_base = "\(.*\)"/\1/p' | head -1; }
+base() {
+  command -v ntm >/dev/null 2>&1 || return 1
+  ntm config show 2>/dev/null | sed -n 's/^projects_base = "\(.*\)"/\1/p' | head -1
+}
 
 run_probe_command() {
   local timeout_seconds="$1" output_file status_file pid elapsed status
@@ -196,7 +199,7 @@ preflight() {
   else
     echo "  ✗ agent-mail server not running — start it with: am"; missing=1
   fi
-  local b; b="$(base)"
+  local b; b="$(base || true)"
   if [ -n "$b" ] && [ -d "$b" ]; then echo "  ✓ projects_base = $b"; else echo "  ✗ projects_base unset — run: ntm config set projects-base <dir>"; missing=1; fi
   probe_skill_staleness
   probe_auth_state
@@ -216,9 +219,116 @@ preflight() {
   echo "All flywheel prerequisites present."
 }
 
+confirm_step() {
+  local prompt="$1" answer
+  if [ "${FLYWHEEL_BOOTSTRAP_YES:-0}" = "1" ]; then
+    return 0
+  fi
+  printf '%s [y/N] ' "$prompt" >&2
+  read -r answer || return 1
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+bootstrap_run() {
+  local label="$1" command="$2" dry_run="$3"
+  echo "==> $label"
+  if [ "$dry_run" = 1 ]; then
+    echo "  dry-run: $command"
+    return 0
+  fi
+  if confirm_step "Run: $command"; then
+    bash -lc "$command"
+  else
+    echo "  skipped"
+  fi
+}
+
+agent_mail_token() {
+  local env_file="${MCP_AGENT_MAIL_ENV:-$HOME/.local/share/mcp_agent_mail/.env}" line
+  [ -f "$env_file" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      MCP_AGENT_MAIL_TOKEN=*|AGENT_MAIL_TOKEN=*|AUTH_TOKEN=*|TOKEN=*)
+        line="${line#*=}"
+        line="${line%\"}"
+        line="${line#\"}"
+        printf '%s' "$line"
+        return 0
+        ;;
+    esac
+  done < "$env_file"
+  return 1
+}
+
+print_codex_mcp_config() {
+  local token="${1:-<token from ~/.local/share/mcp_agent_mail/.env>}"
+  cat <<EOF
+Codex MCP config (~/.codex/config.toml):
+[mcp_servers.mcp_agent_mail]
+url = "http://127.0.0.1:8765/api/"
+http_headers = { Authorization = "Bearer $token" }
+EOF
+}
+
+bootstrap() {
+  local dry_run=0 projects_base="${FLYWHEEL_PROJECTS_BASE:-$HOME/Code/github}" token
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=1; shift ;;
+      --yes) FLYWHEEL_BOOTSTRAP_YES=1; shift ;;
+      -h|--help)
+        echo "usage: flywheel-link.sh bootstrap [--dry-run] [--yes]" >&2
+        return 0
+        ;;
+      *) echo "flywheel-link.sh bootstrap: unknown arg: $1" >&2; return 2 ;;
+    esac
+  done
+
+  case "$(uname -s)" in
+    Linux)
+      bootstrap_run "ACFS bootstrap (Linux)" \
+        'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/install.sh?$(date +%s)" | bash -s -- --yes --mode vibe' "$dry_run"
+      ;;
+    Darwin)
+      bootstrap_run "NTM installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh?$(date +%s)" | bash -s -- --easy-mode' "$dry_run"
+      bootstrap_run "Agent Mail installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/scripts/install.sh?$(date +%s)" | bash -s -- --yes' "$dry_run"
+      bootstrap_run "DCG installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh?$(date +%s)" | bash -s -- --easy-mode' "$dry_run"
+      bootstrap_run "CASS installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_session_search/main/install.sh?$(date +%s)" | bash -s -- --easy-mode --verify' "$dry_run"
+      bootstrap_run "UBS installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ultimate_bug_scanner/main/install.sh?$(date +%s)" | bash -s -- --easy-mode' "$dry_run"
+      bootstrap_run "post_compact_reminder installer" 'curl -fsSL https://github.com/Dicklesworthstone/post_compact_reminder/raw/refs/heads/main/install-post-compact-reminder.sh | bash' "$dry_run"
+      bootstrap_run "caam installer" 'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_account_manager/main/install.sh?$(date +%s)" | bash -s -- --verify' "$dry_run"
+      ;;
+    *)
+      echo "Unsupported OS for bootstrap automation; follow references/setup.md §A manually." >&2
+      return 2
+      ;;
+  esac
+
+  bootstrap_run "Start Agent Mail server" 'am >/tmp/agent-mail.log 2>&1 &' "$dry_run"
+  echo "  keep Agent Mail running; verify http://127.0.0.1:8765 responds before spawning"
+  if [ "$dry_run" = 0 ]; then
+    if curl -fsS --max-time 3 "http://127.0.0.1:8765/" -o /dev/null 2>/dev/null || nc -z 127.0.0.1 8765 2>/dev/null; then
+      echo "  ✓ agent-mail server (:8765)"
+    else
+      echo "  ⚠ agent-mail server not reachable yet"
+    fi
+  fi
+
+  token="$(agent_mail_token || true)"
+  print_codex_mcp_config "$token"
+
+  bootstrap_run "Seed ntm projects_base" "ntm config set projects-base $projects_base" "$dry_run"
+  bootstrap_run "Seed ntm coordinator auto_assign" "ntm config set coordinator.auto_assign true" "$dry_run"
+  bootstrap_run "Build CASS index" "cass index" "$dry_run"
+  bootstrap_run "Re-run flywheel preflight" "$SCRIPT_DIR/flywheel-link.sh preflight" "$dry_run"
+}
+
 link() {
   local path="${1:-.}" abs b name dest
-  abs="$(cd "$path" && pwd)"; b="$(base)"
+  abs="$(cd "$path" && pwd)"; b="$(base || true)"
   [ -n "$b" ] || { echo "could not read projects_base from 'ntm config'" >&2; return 1; }
   name="$(basename "$abs")"; dest="$b/$name"
   if [ -L "$dest" ] || [ -e "$dest" ]; then echo "already linked: $dest"; return 0; fi
@@ -446,7 +556,12 @@ install_guard() {
 
 setup() {
   local path="${1:-.}" abs b name dest
-  abs="$(cd "$path" && pwd)"; b="$(base)"; name="$(basename "$abs")"; dest="$b/$name"
+  echo "==> preflight"
+  if ! preflight; then
+    echo "setup aborted: run bootstrap first, then re-run setup" >&2
+    return 1
+  fi
+  abs="$(cd "$path" && pwd)"; b="$(base || true)"; name="$(basename "$abs")"; dest="$b/$name"
   link "$path"
   # Run the inits via the projects_base symlink path (NOT the real nested path) so Agent Mail
   # keys this repo under ONE project, matching `ntm spawn <name>`. See references/setup.md §C.
@@ -481,37 +596,41 @@ setup() {
 
 # Success test: prove the repo is flywheel-ready — resolvable by ntm AND holding a completable bead.
 verify() {
-  local path="${1:-.}" abs b name dest ok=1 n
-  abs="$(cd "$path" && pwd)"; b="$(base)"; name="$(basename "$abs")"; dest="$b/$name"
+  local path="${1:-.}" abs b name dest check_dir ok=1 n
+  abs="$(cd "$path" && pwd)"; b="$(base || true)"; name="$(basename "$abs")"; dest="$b/$name"
   echo "==> verification — is '$name' flywheel-ready?"
   if [ -L "$dest" ] || [ -d "$dest" ]; then
     echo "  ✓ linked into projects_base ($dest) — 'ntm spawn $name' will resolve it"
+    check_dir="$dest"
   else
     echo "  ✗ NOT linked into projects_base — run: flywheel-link.sh link"; ok=0
+    check_dir="$path"
   fi
-  ( cd "${dest:-$path}" 2>/dev/null || cd "$path"
-    if [ -d .beads ]; then echo "  ✓ beads initialised (.beads/)"; else echo "  ✗ no .beads/ — run: flywheel-link.sh setup"; fi
-    n="$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b' || true)"
-    if [ "${n:-0}" -ge 1 ]; then
-      echo "  ✓ ${n} bead(s) present — run 'bv', claim one, close it to prove the loop"
-    else
-      echo "  ⚠ no beads yet — create one with: br create \"<title>\" --type task"
-    fi
-  )
+  if [ -d "$check_dir/.beads" ]; then echo "  ✓ beads initialised (.beads/)"; else echo "  ✗ no .beads/ — run: flywheel-link.sh setup"; ok=0; fi
+  n="$(cd "$check_dir" 2>/dev/null && br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b' || true)"
+  if [ "${n:-0}" -ge 1 ]; then
+    echo "  ✓ ${n} bead(s) present — run 'bv', claim one, close it to prove the loop"
+  else
+    echo "  ⚠ no beads yet — create one with: br create \"<title>\" --type task"
+    ok=0
+  fi
   if [ "$ok" = 1 ]; then
     echo "  ✅ SUCCESS: '$name' is flywheel-ready. Success test = 'bv' shows a bead AND 'ntm spawn $name' launches a swarm on it."
   else
     echo "  ❌ INCOMPLETE — resolve the ✗ above, then re-run: flywheel-link.sh verify"
+    return 1
   fi
 }
 
 list() {
-  local b f; b="$(base)"; shopt -s nullglob
+  local b f; b="$(base || true)"; shopt -s nullglob
+  [ -n "$b" ] || { echo "could not read projects_base from 'ntm config'" >&2; return 1; }
   for f in "$b"/*; do [ -L "$f" ] && printf '  %s -> %s\n' "$(basename "$f")" "$(readlink "$f")"; done
 }
 
 case "${1:-preflight}" in
   preflight) preflight ;;
+  bootstrap) shift; bootstrap "$@" ;;
   link)  shift; link  "${1:-.}" ;;
   setup) shift; setup "${1:-.}" ;;
   verify) shift; verify "${1:-.}" ;;

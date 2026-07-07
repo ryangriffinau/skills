@@ -19,6 +19,16 @@ curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_acc
 brew install fzf            # mainstream → brew is fine
 ```
 
+The launcher can walk this interactively:
+
+```bash
+bash <skill>/scripts/flywheel-link.sh bootstrap --dry-run  # print every command
+bash <skill>/scripts/flywheel-link.sh bootstrap            # confirm each installer/step
+```
+
+`setup` runs `preflight` first and aborts while any prerequisite is missing; run
+`bootstrap` or fix the missing tool, then rerun `setup`.
+
 **Install policy for *any* future tool:** Homebrew is the default for mainstream tools — `brew info <name>` shows `homebrew/core (bottled)` → use brew. The only carve-out: indie tools whose canonical channel is their own `install.sh` or a third-party `user/tap` (the whole Dicklesworthstone stack) → use `install.sh`. Never install one tool through two managers.
 
 `post_compact_reminder` installs a Claude Code `SessionStart` hook with matcher `compact`;

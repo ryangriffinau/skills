@@ -52,6 +52,14 @@ esac
 SH
   cat > "$bin_dir/br" <<'SH'
 #!/usr/bin/env bash
+if [ "${1:-}" = "init" ]; then
+  mkdir -p .beads
+  exit 0
+fi
+if [ "${1:-}" = "list" ]; then
+  printf '%s\n' "task fixture-bead"
+  exit 0
+fi
 exit 0
 SH
   cat > "$bin_dir/bv" <<'SH'
@@ -107,6 +115,40 @@ PATH="$TMP_ROOT/bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" FLYWHE
   /bin/bash "$installed/scripts/flywheel-link.sh" preflight >"$preflight_out" 2>&1
 assert_output_contains "$preflight_out" "flywheel-local-launcher installed skill is stale" "staleness warning"
 assert_output_contains "$preflight_out" "npx skills update flywheel-local-launcher" "staleness update command"
+
+missing_out="$TMP_ROOT/missing-preflight-out"
+set +e
+PATH="/bin:/usr/bin" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 bash "$LINKER" preflight >"$missing_out" 2>&1
+missing_status="$?"
+set -e
+[ "$missing_status" -ne 0 ] || fail "preflight missing tools should exit nonzero"
+assert_output_contains "$missing_out" "Missing prerequisites" "preflight missing tools message"
+
+repo="$(new_repo setup_red)"
+setup_red_out="$TMP_ROOT/setup-red-out"
+set +e
+PATH="/bin:/usr/bin" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 bash "$LINKER" setup "$repo" >"$setup_red_out" 2>&1
+setup_red_status="$?"
+set -e
+[ "$setup_red_status" -ne 0 ] || fail "setup should abort when preflight is red"
+assert_output_contains "$setup_red_out" "run bootstrap first" "setup red bootstrap hint"
+
+repo="$(new_repo verify_incomplete)"
+verify_out="$TMP_ROOT/verify-out"
+set +e
+PATH="$TMP_ROOT/bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" bash "$LINKER" verify "$repo" >"$verify_out" 2>&1
+verify_status="$?"
+set -e
+[ "$verify_status" -ne 0 ] || fail "verify incomplete should exit nonzero"
+assert_output_contains "$verify_out" "INCOMPLETE" "verify incomplete message"
+
+bootstrap_out="$TMP_ROOT/bootstrap-out"
+PATH="$TMP_ROOT/bin:/bin:/usr/bin" bash "$LINKER" bootstrap --dry-run >"$bootstrap_out" 2>&1
+assert_output_contains "$bootstrap_out" "dry-run: curl -fsSL" "bootstrap dry-run installers"
+assert_output_contains "$bootstrap_out" "Codex MCP config" "bootstrap codex config"
+assert_output_contains "$bootstrap_out" "ntm config set projects-base" "bootstrap ntm config"
+assert_output_contains "$bootstrap_out" "cass index" "bootstrap cass index"
+assert_output_contains "$bootstrap_out" "flywheel-link.sh preflight" "bootstrap reruns preflight"
 
 repo="$(new_repo team_repo)"
 git -C "$repo" remote add origin git@example.com:org/repo.git

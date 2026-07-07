@@ -9,12 +9,10 @@ description: "Make a local repo ready for the Agent Flywheel and manage its proj
 
 # Flywheel local launcher
 
-Prepares a single local repo for Jeffrey Emanuel's Agent Flywheel and maintains the flat
-`projects_base` symlinks NTM needs. **Strictly local per-repo setup** — it does NOT launch
-or drive swarms (that is the **flywheel-conductor** skill, which consumes this skill's
-`flywheel-profile.sh` + `flywheel-kickoff.sh` output),
-and it does NOT bootstrap a machine (remote/Linux machines use Emanuel's ACFS; macOS uses
-the per-tool `install.sh` list — see `references/setup.md` §A.1).
+Prepares a machine or single local repo for Jeffrey Emanuel's Agent Flywheel and maintains
+the flat `projects_base` symlinks NTM needs. It does NOT launch or drive swarms (that is the
+**flywheel-conductor** skill, which consumes this skill's `flywheel-profile.sh` +
+`flywheel-kickoff.sh` output).
 
 ## When to use
 - Onboarding a new repo to the flywheel ("set up `<repo>` for the flywheel").
@@ -51,6 +49,7 @@ Run the bundled script `scripts/flywheel-link.sh` from inside the target repo:
 
 | Command | Does |
 |---|---|
+| `bootstrap [--dry-run] [--yes]` | Machine bootstrap helper: confirm/run the per-tool installers, wire Agent Mail/Codex MCP, seed ntm config, build CASS, and rerun preflight |
 | `preflight` | Verify stack installed (ntm, agent-mail, br, bv, dcg, cass, ubs, claude, codex) + Agent Mail server on `:8765` + `projects_base` set; report each gap with its fix |
 | `link [path]` | Symlink a repo (default: cwd) into `projects_base` under its basename |
 | `setup [path]` | `link` + `br init` (+ a starter **verification bead**) + `ntm init` + lease guard + `.flywheel/profile`, check AGENTS.md, then run `verify` |
@@ -66,7 +65,7 @@ bash scripts/flywheel-link.sh setup       # link + init this repo
 ## Rules
 - **Never auto-edit AGENTS.md.** `setup` only *checks* for the no-worktree / flywheel protocol and prints a suggested snippet; adding it requires explicit user confirmation.
 - **No git worktrees.** The flywheel uses one shared working tree; the suggested AGENTS.md snippet enforces this.
-- **Local only.** If the stack is missing, point the user at ACFS (remote/Linux) or the install.sh list (macOS) — do not try to install the machine stack from here.
+- **Local only, machine bootstrap allowed.** `bootstrap` may run the documented local installers only with per-step confirmation (or `--dry-run`/`--yes`); normal repo setup still aborts when preflight is red.
 - Idempotent: re-running `link`/`setup` on an already-prepared repo is safe.
 
 ## Reference
