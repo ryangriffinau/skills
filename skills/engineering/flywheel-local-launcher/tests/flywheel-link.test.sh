@@ -60,7 +60,13 @@ if [ "${1:-}" = "--robot-triage" ]; then
   printf '%s\n' "Agent Flywheel workflow instructions" >> AGENTS.md
 fi
 SH
-  chmod +x "$bin_dir/ntm" "$bin_dir/br" "$bin_dir/bv"
+  for tool in tmux dcg cass ubs claude codex curl nc; do
+    cat > "$bin_dir/$tool" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  done
+  chmod +x "$bin_dir/ntm" "$bin_dir/br" "$bin_dir/bv" "$bin_dir"/tmux "$bin_dir"/dcg "$bin_dir"/cass "$bin_dir"/ubs "$bin_dir"/claude "$bin_dir"/codex "$bin_dir"/curl "$bin_dir"/nc
 }
 
 new_repo() {
@@ -79,6 +85,28 @@ run_setup() {
 }
 
 install_stubs
+
+canonical="$TMP_ROOT/canonical-skills"
+installed="$TMP_ROOT/installed-skill"
+mkdir -p "$canonical/skills/engineering/flywheel-local-launcher" "$installed/scripts"
+cp "$LINKER" "$installed/scripts/flywheel-link.sh"
+cat > "$canonical/skills/engineering/flywheel-local-launcher/SKILL.md" <<'MD'
+---
+name: flywheel-local-launcher
+version: 0.3.0
+---
+MD
+cat > "$installed/SKILL.md" <<'MD'
+---
+name: flywheel-local-launcher
+version: 0.1.0
+---
+MD
+preflight_out="$TMP_ROOT/preflight-out"
+PATH="$TMP_ROOT/bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 FLYWHEEL_SKILLS_REPO="$canonical" \
+  /bin/bash "$installed/scripts/flywheel-link.sh" preflight >"$preflight_out" 2>&1
+assert_output_contains "$preflight_out" "flywheel-local-launcher installed skill is stale" "staleness warning"
+assert_output_contains "$preflight_out" "npx skills update flywheel-local-launcher" "staleness update command"
 
 repo="$(new_repo team_repo)"
 git -C "$repo" remote add origin git@example.com:org/repo.git

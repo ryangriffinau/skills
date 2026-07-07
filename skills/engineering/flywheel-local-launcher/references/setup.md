@@ -29,6 +29,25 @@ agent auth profiles: after install, snapshot the current Claude auth with
 the tool's normal interactive `/login` flow. Use the `install.sh` path for `caam`, not the
 third-party brew tap.
 
+### Updating installed skills
+
+After this repo changes, installed copies stay stale until you update them with the skills
+CLI:
+
+```bash
+npx skills update flywheel-local-launcher
+```
+
+`flywheel-link.sh preflight` compares the installed `flywheel-local-launcher` `SKILL.md`
+version with the local canonical skills repo when it can find one, and warns when the
+installed copy is older. Use the plain `npx skills update ...` path; the old direct-copy
+fallback is not part of the normal flow after the YAML frontmatter fix.
+
+Use **verify** for per-repo readiness checks that should finish in seconds: linked path,
+beads present, hooks/profile in place, and no obvious setup gaps. Use **certify** only for
+first-conduct or release-quality proof: it takes minutes because it launches real agents or
+otherwise proves the end-to-end journey.
+
 ### 2. Start + wire Agent Mail
 ```bash
 am          # one server per machine on http://127.0.0.1:8765 — leave it running (a dedicated pane/tmux window)

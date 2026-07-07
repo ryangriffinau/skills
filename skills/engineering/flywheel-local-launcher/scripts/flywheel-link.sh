@@ -127,6 +127,64 @@ probe_auth_state() {
   fi
 }
 
+skill_version() {
+  sed -n 's/^version:[[:space:]]*//p' "$1" 2>/dev/null | head -1 | tr -d "\"'"
+}
+
+version_lt() {
+  local left="$1" right="$2" l1=0 l2=0 l3=0 r1=0 r2=0 r3=0
+  IFS=. read -r l1 l2 l3 <<EOF
+$left
+EOF
+  IFS=. read -r r1 r2 r3 <<EOF
+$right
+EOF
+  l1="${l1:-0}"; l2="${l2:-0}"; l3="${l3:-0}"
+  r1="${r1:-0}"; r2="${r2:-0}"; r3="${r3:-0}"
+  [ "$l1" -lt "$r1" ] && return 0
+  [ "$l1" -gt "$r1" ] && return 1
+  [ "$l2" -lt "$r2" ] && return 0
+  [ "$l2" -gt "$r2" ] && return 1
+  [ "$l3" -lt "$r3" ]
+}
+
+canonical_skill_file() {
+  local root
+  for root in \
+    "${FLYWHEEL_SKILLS_REPO:-}" \
+    "$HOME/Code/github/ryangriffinau/skills" \
+    "$HOME/Code/github/skills"; do
+    [ -n "$root" ] || continue
+    if [ -f "$root/skills/engineering/flywheel-local-launcher/SKILL.md" ]; then
+      printf '%s\n' "$root/skills/engineering/flywheel-local-launcher/SKILL.md"
+      return 0
+    fi
+  done
+  return 1
+}
+
+probe_skill_staleness() {
+  local installed canonical installed_dir canonical_dir installed_version canonical_version
+  installed="$SCRIPT_DIR/../SKILL.md"
+  [ -f "$installed" ] || return 0
+  canonical="$(canonical_skill_file)" || return 0
+  installed_dir="$(cd "$(dirname "$installed")" && pwd)"
+  canonical_dir="$(cd "$(dirname "$canonical")" && pwd)"
+  [ "$installed_dir" = "$canonical_dir" ] && return 0
+
+  installed_version="$(skill_version "$installed")"
+  canonical_version="$(skill_version "$canonical")"
+  [ -n "$installed_version" ] || return 0
+  [ -n "$canonical_version" ] || return 0
+
+  if version_lt "$installed_version" "$canonical_version"; then
+    echo "  ⚠ flywheel-local-launcher installed skill is stale (installed $installed_version < repo $canonical_version)"
+    echo "    run: npx skills update flywheel-local-launcher"
+  else
+    echo "  ✓ flywheel-local-launcher skill version $installed_version"
+  fi
+}
+
 preflight() {
   local missing=0
   echo "Flywheel preflight:"
@@ -140,6 +198,7 @@ preflight() {
   fi
   local b; b="$(base)"
   if [ -n "$b" ] && [ -d "$b" ]; then echo "  ✓ projects_base = $b"; else echo "  ✗ projects_base unset — run: ntm config set projects-base <dir>"; missing=1; fi
+  probe_skill_staleness
   probe_auth_state
 
   if [ "$missing" -ne 0 ]; then
