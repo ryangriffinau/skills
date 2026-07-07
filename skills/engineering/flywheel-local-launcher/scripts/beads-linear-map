@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# beads-linear-map — create or record the Beads epic -> Linear project map.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LINEAR_GRAPHQL="${LINEAR_GRAPHQL:-https://api.linear.app/graphql}"
+
+usage() {
+  echo "usage: beads-linear-map EPIC-ID (--create PROJECT-NAME | --project-id ID) [--team TEAM] [--repo DIR]" >&2
+}
+
+log() {
+  echo "beads-linear-map: $*" >&2
+}
+
+json_escape() {
+  local v="$1"
+  v="${v//\\/\\\\}"
+  v="${v//\"/\\\"}"
+  v="${v//$'\n'/\\n}"
+  v="${v//$'\r'/}"
+  v="${v//$'\t'/\\t}"
+  printf '%s' "$v"
+}
+
+field() {
+  printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -1 | sed "s/\"$2\":\"//; s/\"$//"
+}
+
+graphql_body() {
+  local query="$1" variables="$2"
+  printf '{"query":"%s","variables":%s}' "$(json_escape "$query")" "$variables"
+}
+
+resolve_profile() {
+  local repo_abs="$1"
+  eval "$("$SCRIPT_DIR/flywheel-profile.sh" --repo "$repo_abs" 2>/dev/null)" || true
+}
+
+resolve_linear_key() {
+  local repo_abs="$1" value
+  if [ -x "$SCRIPT_DIR/flywheel-env" ]; then
+    value="$("$SCRIPT_DIR/flywheel-env" get LINEAR_API_KEY --repo "$repo_abs" 2>/dev/null)" || value=""
+    if [ -n "$value" ]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  fi
+  if [ -n "${LINEAR_API_KEY:-}" ]; then
+    printf '%s' "$LINEAR_API_KEY"
+    return 0
+  fi
+  return 1
+}
+
+linear_api() {
+  local key="$1" body="$2" output_file err_file status
+  LINEAR_RESPONSE=""
+  output_file="$(mktemp "${TMPDIR:-/tmp}/beads-linear-map-response.XXXXXX")"
+  err_file="$(mktemp "${TMPDIR:-/tmp}/beads-linear-map-curl.XXXXXX")"
+  curl -sS -X POST "$LINEAR_GRAPHQL" \
+    -H "Authorization: $key" \
+    -H "Content-Type: application/json" \
+    -d "$body" >"$output_file" 2>"$err_file"
+  status="$?"
+  LINEAR_RESPONSE="$(cat "$output_file" 2>/dev/null || true)"
+  LINEAR_CURL_ERROR="$(cat "$err_file" 2>/dev/null || true)"
+  rm -f "$output_file" "$err_file"
+
+  if [ "$status" -ne 0 ]; then
+    return 10
+  fi
+  if printf '%s' "$LINEAR_RESPONSE" | grep -q '"errors"[[:space:]]*:'; then
+    return 11
+  fi
+  return 0
+}
+
+project_create() {
+  local key="$1" name="$2" team="$3" body api_status project_id
+  body="$(graphql_body 'mutation($name:String!,$teamIds:[String!]!){projectCreate(input:{name:$name,teamIds:$teamIds}){success project{id}}}' "{\"name\":\"$(json_escape "$name")\",\"teamIds\":[\"$(json_escape "$team")\"]}")"
+  linear_api "$key" "$body"
+  api_status="$?"
+  if [ "$api_status" -ne 0 ]; then
+    case "$api_status" in
+      10) log "projectCreate curl/network error: ${LINEAR_CURL_ERROR:-curl failed}" ;;
+      11) log "projectCreate GraphQL errors: $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)" ;;
+    esac
+    return 1
+  fi
+  if ! printf '%s' "$LINEAR_RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+    log "projectCreate success=false: $(printf '%s' "$LINEAR_RESPONSE" | head -c 200)"
+    return 1
+  fi
+  project_id="$(field "$LINEAR_RESPONSE" id)"
+  if [ -z "$project_id" ]; then
+    log "projectCreate response missing project id"
+    return 1
+  fi
+  printf '%s' "$project_id"
+}
+
+resolve_team_id() {
+  local key="$1" team="$2" body api_status team_id
+  body="$(graphql_body 'query($key:String!){teams(filter:{key:{eq:$key}},first:1){nodes{id key}}}' "{\"key\":\"$(json_escape "$team")\"}")"
+  linear_api "$key" "$body"
+  api_status="$?"
+  if [ "$api_status" -eq 0 ]; then
+    team_id="$(field "$LINEAR_RESPONSE" id)"
+    if [ -n "$team_id" ]; then
+      printf '%s' "$team_id"
+      return 0
+    fi
+  fi
+
+  printf '%s' "$team"
+}
+
+append_mapping() {
+  local projects_tsv="$1" epic="$2" project_id="$3" existing
+  mkdir -p "$(dirname "$projects_tsv")"
+  touch "$projects_tsv"
+
+  existing="$(awk -F '\t' -v epic="$epic" '$1 == epic { print $2; exit }' "$projects_tsv")"
+  if [ -n "$existing" ]; then
+    if [ "$existing" = "$project_id" ]; then
+      log "already mapped $epic -> $project_id"
+      return 0
+    fi
+    log "$epic already maps to $existing; refusing to replace with $project_id"
+    return 1
+  fi
+
+  printf '%s\t%s\n' "$epic" "$project_id" >> "$projects_tsv"
+  log "mapped $epic -> $project_id"
+}
+
+repo="."
+epic=""
+create_name=""
+project_id=""
+team=""
+
+if [ "$#" -lt 1 ]; then
+  usage
+  exit 2
+fi
+
+epic="$1"
+shift
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      repo="$2"
+      shift 2
+      ;;
+    --create)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      create_name="$2"
+      shift 2
+      ;;
+    --project-id)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      project_id="$2"
+      shift 2
+      ;;
+    --team)
+      [ "$#" -ge 2 ] || { usage; exit 2; }
+      team="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "beads-linear-map: unknown arg: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+case "$epic" in
+  ""|--*) usage; exit 2 ;;
+esac
+
+if { [ -n "$create_name" ] && [ -n "$project_id" ]; } || { [ -z "$create_name" ] && [ -z "$project_id" ]; }; then
+  usage
+  exit 2
+fi
+
+repo_abs="$(cd "$repo" 2>/dev/null && pwd)" || { log "repo not found: $repo"; exit 2; }
+resolve_profile "$repo_abs"
+
+if [ -z "$team" ]; then
+  team="${FLYWHEEL_PROJECTION_TEAM:-}"
+fi
+
+if [ -n "$create_name" ]; then
+  team_id="$team"
+  if [ -z "$team" ]; then
+    log "--create requires --team TEAM or FLYWHEEL_PROJECTION_TEAM=TEAM in .flywheel/profile"
+    exit 2
+  fi
+  if ! key="$(resolve_linear_key "$repo_abs")"; then
+    log "LINEAR_API_KEY not set - cannot create Linear project. Set it with flywheel-env or process env."
+    exit 1
+  fi
+  team_id="$(resolve_team_id "$key" "$team")"
+  project_id="$(project_create "$key" "$create_name" "$team_id")"
+fi
+
+append_mapping "$repo_abs/.flywheel/projects.tsv" "$epic" "$project_id"

@@ -103,6 +103,7 @@ Absence is valid and means Emmanuel defaults:
 | `FLYWHEEL_PRECOMMIT` | `light`, `heavy` | `light` |
 | `FLYWHEEL_PREPUSH` | `full`, `none` | `full` |
 | `FLYWHEEL_PROJECTION_APP` | empty, `linear` | empty |
+| `FLYWHEEL_PROJECTION_TEAM` | Linear team id or key | empty |
 | `FLYWHEEL_ENV_REQUIRED` | comma-separated env var names | empty |
 
 Package manager is detected, not stored: `package.json` `packageManager` wins; otherwise lockfiles are checked in this order: `pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`, `yarn.lock`; otherwise `none`.
@@ -120,6 +121,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=
+FLYWHEEL_PROJECTION_TEAM=
 FLYWHEEL_ENV_REQUIRED=
 ```
 
@@ -130,6 +132,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=linear
+FLYWHEEL_PROJECTION_TEAM=WHC
 FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY
 ```
 
@@ -152,10 +155,24 @@ Resolution order is fixed: process env > repo `.flywheel/env.local` > repo `.env
 missing a required value it should mark the bead blocked with a comment containing
 `ENV-MISSING: <NAME>`.
 
-When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the manual epic→Linear-project map (create/choose the Linear project yourself, paste its id, commit it):
+When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the epic→Linear-project map:
 ```text
 customer-template-architecture-transfer-w7o	c538d7a2-a7bd-4474-a4d9-8d024d4478de
 ```
+
+Use `scripts/beads-linear-map` to hide the mapping ritual and write the tab-separated line idempotently:
+
+```bash
+scripts/beads-linear-map customer-template-architecture-transfer-w7o --project-id c538d7a2-a7bd-4474-a4d9-8d024d4478de --repo .
+scripts/beads-linear-map customer-template-architecture-transfer-w7o --create "Customer Template — Architecture Transfer" --team WHC --repo .
+```
+
+`--project-id` records an existing Linear project and does not need an API call. `--create`
+uses the Linear GraphQL API with `LINEAR_API_KEY`; this exists because Linear MCP project
+creation needs interactive OAuth and is not available to headless workers. `--team` overrides
+`FLYWHEEL_PROJECTION_TEAM`; otherwise `--create` reads `FLYWHEEL_PROJECTION_TEAM` from the
+profile and errors clearly when neither is set.
+
 Then **apply the projection** with the runnable, idempotent `scripts/beads-linear-sync --repo .`.
 It reads `LINEAR_API_KEY` through `scripts/flywheel-env get LINEAR_API_KEY --repo .`, with
 process env as a fallback if the CLI is absent. It posts a Linear project **status update**

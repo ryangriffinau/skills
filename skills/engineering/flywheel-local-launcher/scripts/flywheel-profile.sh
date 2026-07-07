@@ -35,6 +35,7 @@ worktrees="false"
 precommit="light"
 prepush="full"
 projection_app=""
+projection_team=""
 env_required=""
 pm="none"
 
@@ -69,6 +70,20 @@ valid_env_required() {
     esac
   done
   return 0
+}
+
+valid_projection_team() {
+  case "$1" in
+    "")
+      return 0
+      ;;
+    *[!A-Za-z0-9._-]*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
 }
 
 apply_profile_line() {
@@ -108,6 +123,14 @@ apply_profile_line() {
         ""|linear) projection_app="$value" ;;
         *) warn_invalid "FLYWHEEL_PROJECTION_APP" "$value" "$projection_app" ;;
       esac
+      ;;
+    FLYWHEEL_PROJECTION_TEAM=*)
+      value="$(parse_profile_value "$line" "FLYWHEEL_PROJECTION_TEAM")"
+      if valid_projection_team "$value"; then
+        projection_team="$value"
+      else
+        warn_invalid "FLYWHEEL_PROJECTION_TEAM" "$value" "$projection_team"
+      fi
       ;;
     FLYWHEEL_ENV_REQUIRED=*)
       value="$(parse_profile_value "$line" "FLYWHEEL_ENV_REQUIRED")"
@@ -170,5 +193,6 @@ printf 'FLYWHEEL_WORKTREES=%s\n' "$(quote_value "$worktrees")"
 printf 'FLYWHEEL_PRECOMMIT=%s\n' "$(quote_value "$precommit")"
 printf 'FLYWHEEL_PREPUSH=%s\n' "$(quote_value "$prepush")"
 printf 'FLYWHEEL_PROJECTION_APP=%s\n' "$(quote_value "$projection_app")"
+printf 'FLYWHEEL_PROJECTION_TEAM=%s\n' "$(quote_value "$projection_team")"
 printf 'FLYWHEEL_ENV_REQUIRED=%s\n' "$(quote_value "$env_required")"
 printf 'FLYWHEEL_PM=%s\n' "$(quote_value "$pm")"
