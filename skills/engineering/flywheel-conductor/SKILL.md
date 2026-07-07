@@ -29,6 +29,10 @@ journal + certification = `.flywheel/runtime/` (gitignored, append-only JSONL pe
 (committed) · this skill's install dir is never written at runtime. State stays in the
 repo; knowledge graduates to the skill (Step 6).
 
+**Quota boundary:** never fan out local same-account model subagents for review, sweeps,
+or other parallel grunt work unless the operator explicitly opts in. Encode that work as
+beads and let Codex workers execute it (G15).
+
 ## Steps
 
 **0 — Enter / re-enter.** Read `.flywheel/runtime/journal.jsonl` if present. Take the
@@ -102,6 +106,7 @@ Full playbook — signal, diagnosis, fix, evidence: [references/guards.md](refer
 | Handing a human a bead id to read/act on | G16 human-tasks-as-chat |
 | Prod-fact claim contradicts the dashboard; caveated evidence doc | G17 evidence-integrity |
 | Worker claims a human/conductor bead in the readiness gap | G18 gate-human-beads-before-workers |
+| Per-bead staged checks pass but the full PR still has warnings | G19 whole-pr-sweep |
 
 ## Certify
 
