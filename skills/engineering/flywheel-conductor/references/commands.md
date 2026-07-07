@@ -49,11 +49,14 @@ to 200 ntm spawn <S> --cod=<COUNT> --init-prompt "<same kickoff prompt>"
 # Check any killed worker's in_progress bead with G10 before assigning new work.
 ```
 
-## Broadcast nudge to all codex workers (G6)
+## Broadcast nudge to all codex workers (G6 — verify, then target if needed)
 
 ```bash
-to 15 ntm send <S> --cod "br ready shows unclaimed beads. If you are not mid-bead, claim the top ready bead now and continue the loop (claim -> reserve -> implement -> verify -> close -> commit+push -> next)."
+to 15 ntm send <S> --cod "br ready shows unclaimed beads. If you are not mid-bead, claim the top ready bead now and continue the loop (claim -> reserve -> implement -> verify -> commit+push -> close -> next)."
 ```
+
+Do not assume the broadcast submitted inside idle Codex panes. Check for claims within one
+check-in; if none land, use the targeted double-Enter re-prompt below.
 
 ## Targeted re-prompt to ONE pane (G5/G8 refocus — codex TUI needs Enter twice)
 
@@ -64,6 +67,24 @@ tmux send-keys -t <S>:0.<N> Enter
 perl -e 'select(undef,undef,undef,2)'
 tmux send-keys -t <S>:0.<N> Enter
 ```
+
+## Whole-PR UBS sweep (G19 — ship/reality-check gate)
+
+Run from the broad reality-check or ship bead in a repo whose branch is based on `origin/master`.
+Adjust the base ref and glob to the repo.
+
+```bash
+git diff origin/master...HEAD --name-only -- "packages/**/*.ts" > .flywheel/runtime/ubs-files.txt
+while IFS= read -r f; do
+  if [ -f "$f" ]; then
+    printf '%s\n' "$f"
+  fi
+done < .flywheel/runtime/ubs-files.txt > .flywheel/runtime/ubs-existing-files.txt
+ubs --files $(cat .flywheel/runtime/ubs-existing-files.txt)
+```
+
+Triage every warning. Fix real bug classes; record any false-positive rationale in the bead
+or PR so the merge gate has an auditable decision.
 
 ## Interrupt a hung turn (G4/G8 — never Ctrl-C a TUI pane)
 

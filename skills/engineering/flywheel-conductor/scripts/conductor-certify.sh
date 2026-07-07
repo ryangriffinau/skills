@@ -52,7 +52,7 @@ cat >"$sandbox/AGENTS.md" <<'EOF'
 # AGENTS.md
 This sandbox runs the Agent Flywheel. One shared tree, NEVER git worktrees.
 Loop per bead: br ready -> claim (br update <id> --status in_progress) -> implement ->
-br close <id> -> commit with explicit paths. No watch commands, no dev servers.
+commit with explicit paths -> br close <id> -> commit the tracker state. No watch commands, no dev servers.
 The beads live in this repo (.beads/). Docs beads only: create the named file with the
 requested content. Never delete files.
 EOF
@@ -69,7 +69,7 @@ epic="$(cd "$sandbox" && br --db "$db" create "certify tiny epic" -t epic -p 1 -
 for n in one two three; do
   (cd "$sandbox" && br --db "$db" create "write docs/$n.md containing the single line: certify $n" \
     -t task -p 2 --parent "$epic" --slug "cert-$n" \
-    -d "Create docs/$n.md with exactly one line: 'certify $n'. Then br close this bead and commit the file with explicit paths." --silent >/dev/null)
+    -d "Create docs/$n.md with exactly one line: 'certify $n'. Then commit the file with explicit paths, close this bead, and commit the tracker state." --silent >/dev/null)
 done
 log "epic $epic + 3 docs beads created"
 
@@ -84,7 +84,7 @@ cleanup() {
 trap cleanup EXIT
 
 # ---------- spawn one worker ----------
-init_prompt="Follow AGENTS.md. Beads db: $db. LOOP until br ready is empty: br ready -> claim the top bead -> do exactly what its description says -> br close it -> commit the created file with explicit paths. One-shot commands only."
+init_prompt="Follow AGENTS.md. Beads db: $db. LOOP until br ready is empty: br ready -> claim the top bead -> do exactly what its description says -> commit the created file with explicit paths -> br close it -> commit the tracker state. One-shot commands only."
 ( cd "$sandbox" && to 200 ntm spawn "$session" --cod=1 --init-prompt "$init_prompt" >/dev/null 2>&1 ) \
   || { log "ntm spawn failed"; exit 1; }
 log "worker spawned"
