@@ -143,6 +143,16 @@ write_epic() {
   } > "$repo/.beads/issues.jsonl"
 }
 
+write_metadata_child() {
+  local child="$1" parent="$2" status="$3"
+  printf '{"id":"%s","title":"Child","status":"%s","dependencies":[{"issue_id":"%s","depends_on_id":"%s","type":"parent-child","created_at":"2026-07-07T00:00:00Z","created_by":"test","metadata":"{}","thread_id":""}]}\n' "$child" "$status" "$child" "$parent"
+}
+
+write_mixed_dependency_child() {
+  local child="$1" parent="$2" other_parent="$3" status="$4"
+  printf '{"id":"%s","title":"Child","status":"%s","dependencies":[{"issue_id":"%s","depends_on_id":"%s","type":"parent-child","created_at":"2026-07-07T00:00:00Z","created_by":"test","metadata":"{}","thread_id":""},{"issue_id":"%s","depends_on_id":"%s","type":"blocks","created_at":"2026-07-07T00:00:00Z","created_by":"test","metadata":"{}","thread_id":""}]}\n' "$child" "$status" "$child" "$other_parent" "$child" "$parent"
+}
+
 run_sync() {
   local out_file="$TMP_ROOT/out" err_file="$TMP_ROOT/err"
   CURL_AUTH_LOG="$TMP_ROOT/curl-auth.log" CURL_BODY_LOG="$TMP_ROOT/curl-body.log" \
@@ -151,6 +161,42 @@ run_sync() {
   SYNC_ERR="$(cat "$err_file")"
   SYNC_ALL="$SYNC_OUT$SYNC_ERR"
 }
+
+repo="$(new_repo dotted_only)"
+write_epic "$repo" dotted_parent proj-a blocked
+run_sync --repo "$repo" --dry-run
+assert_contains "$SYNC_ALL" "epic dotted_parent child-mode=dotted-fallback" "dotted-only child mode"
+assert_contains "$SYNC_ALL" "dotted_parent -> proj-a 1/2 (50%, atRisk)" "dotted-only fallback counts"
+
+repo="$(new_repo metadata_only)"
+printf 'metadata_parent\tproj-a\n' > "$repo/.flywheel/projects.tsv"
+{
+  printf '{"id":"metadata_parent","title":"Epic","status":"open"}\n'
+  write_metadata_child child_alpha metadata_parent closed
+  write_metadata_child child_beta metadata_parent blocked
+  write_mixed_dependency_child child_gamma metadata_parent other_parent closed
+} > "$repo/.beads/issues.jsonl"
+run_sync --repo "$repo" --dry-run
+assert_contains "$SYNC_ALL" "epic metadata_parent child-mode=parent-metadata" "metadata-only child mode"
+assert_contains "$SYNC_ALL" "metadata_parent -> proj-a 1/2 (50%, atRisk)" "metadata-only non-dotted children count"
+
+repo="$(new_repo metadata_and_dotted)"
+printf 'both_parent\tproj-a\n' > "$repo/.flywheel/projects.tsv"
+{
+  printf '{"id":"both_parent","title":"Epic","status":"open"}\n'
+  write_metadata_child both_parent.1 both_parent closed
+  write_metadata_child both_parent.2 both_parent open
+} > "$repo/.beads/issues.jsonl"
+run_sync --repo "$repo" --dry-run
+assert_contains "$SYNC_ALL" "epic both_parent child-mode=parent-metadata" "both child mode prefers metadata"
+assert_contains "$SYNC_ALL" "both_parent -> proj-a 1/2 (50%, onTrack)" "both metadata+dotted children count"
+
+repo="$(new_repo no_children)"
+printf 'empty_parent\tproj-a\n' > "$repo/.flywheel/projects.tsv"
+printf '{"id":"empty_parent","title":"Epic","status":"open"}\n' > "$repo/.beads/issues.jsonl"
+run_sync --repo "$repo" --dry-run
+assert_contains "$SYNC_ALL" "epic empty_parent child-mode=no-children" "no-children mode"
+assert_contains "$SYNC_ALL" "epic empty_parent has no children in Beads; skipping" "no-children skips"
 
 repo="$(new_repo linear_a)"
 write_epic "$repo" linear_a proj-a blocked
