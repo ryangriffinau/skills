@@ -103,8 +103,14 @@ to 5 tmux capture-pane -t <S>:0.<N> -p | tail -15
 Use the mcp-agent-mail MCP tools from the conductor session (project = the repo's
 projects_base path):
 
-- Take/renew: `macro_file_reservation_cycle` (or `file_reservation_paths`) on path
-  `.flywheel/CONDUCTOR`, exclusive, ttl ~900s, reason `conductor <S> <EPIC_ID>`.
+- **Register the conductor identity FIRST** — `register_agent` (program `claude-code`, a
+  stable name) returns a `registration_token`; the reservation and every renew **require
+  that token** (or the MCP session must already be authenticated as that agent). Attempting
+  the lease before registering fails with "agent not found" (kingfield #13; hit twice
+  across sessions).
+- Take/renew: `file_reservation_paths` (or `macro_file_reservation_cycle`) on path
+  `.flywheel/CONDUCTOR`, exclusive, ttl ~900s, reason `conductor <S> <EPIC_ID>`, passing the
+  `registration_token`.
 - Conflict response = another conductor holds it → **STOP** (G13 / Step 0 rule).
 - Release: `release_file_reservations` at teardown (expiry also releases it).
 
@@ -117,6 +123,12 @@ the same operations; do not invent a file-based lock.
 mkdir -p <repo>/.flywheel/runtime
 printf '%s\n' '<one JSON object per assets/journal.schema.json>' >> <repo>/.flywheel/runtime/journal.jsonl
 ```
+
+**Never embed command-like strings in a journal/log line** — a literal `checkout --`,
+`reset --hard`, or a bare `--force` written as prose makes DCG substring-match the quoted
+payload and block the whole append. Describe the action in plain words instead (kingfield
+#17a; also blocked a plan-to-beads encode this session where a bead body quoted a destructive
+command while *documenting* it).
 
 ## Unblock a bead after fixing its external cause (G3)
 

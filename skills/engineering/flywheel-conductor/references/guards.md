@@ -187,13 +187,17 @@ prompt, is the enforcement.
 ## G12 — simple-commands
 
 **Signal:** DCG blocks a conductor command citing a destructive pattern that isn't there
-(e.g. `>` inside a sed replacement string read as a redirect).
-**Diagnosis:** Clever one-liners trip guard heuristics. The guard is right to be paranoid;
-the command was wrong to be clever.
+(e.g. `>` inside a sed replacement string read as a redirect), or it blocks a journal/log
+append because quoted prose contains a command-like string.
+**Diagnosis:** Clever one-liners and literal command-like prose trip guard heuristics. The
+guard is right to be paranoid; the command/log was wrong to be clever or overly literal.
 **Fix:** Rewrite plainly: separate commands, temp files in the scratchpad, python3 heredocs
-for text processing. Never work around the guard's intent.
+for text processing. For journal/log lines, describe dangerous actions in plain language
+rather than embedding literal command strings. Never work around the guard's intent.
 **Evidence:** AT session — a sed with `>` in the replacement was blocked as
-redirect-truncate; the plain rewrite passed immediately.
+redirect-truncate; the plain rewrite passed immediately. Skills gap closure 2026-07-05 —
+quoted destructive-command prose in a bead/log payload triggered DCG while documenting the
+problem.
 
 ## G13 — conductor-survivability
 

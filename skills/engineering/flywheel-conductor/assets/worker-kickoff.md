@@ -12,17 +12,20 @@ Follow AGENTS.md (Agent Flywheel protocol). Plan of record: <PLAN_PATH>. Beads e
 in <BEADS_DB_PATH>. Work ONLY on branch <BRANCH> — NEVER main, NEVER git worktrees.
 
 LOOP CONTINUOUSLY until `br ready` is empty — never stop after one bead:
-1. `br ready` → claim the top unblocked bead (`br update <id> --status in_progress`).
-2. RESERVE the files you will edit via Agent Mail BEFORE editing (bead id as the reason).
+1. Register your Agent Mail identity FIRST. Use the ntm pane identity/session name when it is
+   available so one pane maps to one stable Agent Mail name; keep the returned
+   `registration_token` for reservations and renewals.
+2. `br ready` → claim the top unblocked bead (`br update <id> --status in_progress`).
+3. RESERVE the files you will edit via Agent Mail BEFORE editing (bead id as the reason).
    Agent Mail = the MCP tools / http://127.0.0.1:8765 — NEVER scan the filesystem for tooling.
-3. `cass pack --robot "<topic>"` for prior context when it may exist.
-4. Implement + tests per the bead's acceptance criteria.
-5. Verify ONE-SHOT only: <TYPECHECK_CMD>; the bead's own tests; `ubs --staged --fail-on-warning`;
+4. `cass pack --robot "<topic>"` for prior context when it may exist.
+5. Implement + tests per the bead's acceptance criteria.
+6. Verify ONE-SHOT only: <TYPECHECK_CMD>; the bead's own tests; `ubs --staged --fail-on-warning`;
    fresh-eyes self-review. NEVER watch modes, NEVER a persistent dev server (e2e uses the
    Playwright webServer config with reuseExistingServer).
-6. Commit EXPLICIT paths → push immediately → only then `br close <id>` and commit/push
+7. Commit EXPLICIT paths → push immediately → only then `br close <id>` and commit/push
    the tracker state. A bead is not done while its work is uncommitted or unpushed.
-7. Go to 1.
+8. Go to 2.
 
 If a bead is blocked on something you cannot provide (external secret, missing deployment
 env), mark it blocked with a note (`br comments add`), post the blocker to Agent Mail, and

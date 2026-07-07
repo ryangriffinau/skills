@@ -35,8 +35,9 @@ beads and let Codex workers execute it (G15).
 
 ## Steps
 
-**0 — Enter / re-enter.** Read `.flywheel/runtime/journal.jsonl` if present. Take the
-conductor lease (reservation on `.flywheel/CONDUCTOR`, TTL ~15 min, reason
+**0 — Enter / re-enter.** Read `.flywheel/runtime/journal.jsonl` if present. Register this
+conductor in Agent Mail first and keep the returned `registration_token`; take the conductor
+lease with that identity (reservation on `.flywheel/CONDUCTOR`, TTL ~15 min, reason
 `conductor <session> <epic>`). Conflict → another conductor is active: report and **stop**.
 Granted → if a swarm is live, re-arm the check-in and jump to Step 4 (this is how a fork,
 compaction, or teammate adopts an orphaned swarm — G13). If the repo has no
