@@ -1,9 +1,9 @@
 ---
 name: project-vision
 status: battle-tested
-version: 1.1.0
+version: 1.2.0
 tags: [planning, vision, alignment]
-updated: 2026-06-21
+updated: 2026-07-06
 description: Creates and applies root VISION.md files for projects using a lightweight init grill and explicit read/update rules. Use when creating, installing, reviewing, applying, checking proposed work against, or explicitly updating project vision docs, or when the user mentions VISION.md, vision init, vision check, project direction, or auto-injected vision context.
 ---
 
@@ -16,6 +16,7 @@ Use this skill to create or apply a compact root `VISION.md`.
 - `VISION.md` owns long-lived project direction.
 - Do not put agent autonomy gates in `VISION.md`; put those in repo agent docs.
 - Do not use `VISION.md` for roadmap items, sprint plans, implementation status, setup steps, changelogs, or duplicated agent rules.
+- Economics, go-to-market mechanism, and value attribution belong in the repo's strategy/business doc, not `VISION.md` — state each concept in exactly one home. `VISION.md` may hold the durable *bet*, not the operating economics.
 - Do not update an existing `VISION.md` unless the user explicitly requests a vision update.
 - If requested work contradicts `VISION.md`, raise the contradiction and ask whether the vision or work direction should win.
 - A `check` verdict never edits `VISION.md` and never silently proceeds on `CONTRADICTS` — it escalates the vision-vs-work decision to the user.
@@ -43,6 +44,8 @@ Use this skill to create or apply a compact root `VISION.md`.
 - Specific enough to reject tempting wrong work.
 - Stable enough to survive several releases.
 - Written as durable constraints and tradeoffs, not aspiration.
+- Every load-bearing claim is a durable constraint, an explicitly-labelled north-star direction, or a present-truth claim someone could measure today — never an unmeasurable aspiration asserted as fact (see [REFERENCE.md](REFERENCE.md) Stress Test).
+- Every load-bearing term is defined once, uses one canonical name, and reads in plain language — no drifting synonyms, no unexplained jargon (see [REFERENCE.md](REFERENCE.md) Canonical Vocabulary).
 - No duplicated backlog, architecture inventory, or procedural rules.
 - Includes a real target human, a problem, a solution bet, and at least one durable advantage or constraint.
 - Each `Will Not Do` clause is concrete enough for `check` to cite a verdict against.

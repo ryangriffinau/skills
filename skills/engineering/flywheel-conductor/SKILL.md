@@ -98,6 +98,10 @@ Full playbook — signal, diagnosis, fix, evidence: [references/guards.md](refer
 | DCG blocks a clever one-liner | G12 simple-commands |
 | Swarm alive, conductor lease expired | G13 conductor-survivability |
 | Conductor and worker both touch the ship bead | G14 ship-bead-gating |
+| Urge to fan out local model subagents for grunt work | G15 no-subagent-fanout |
+| Handing a human a bead id to read/act on | G16 human-tasks-as-chat |
+| Prod-fact claim contradicts the dashboard; caveated evidence doc | G17 evidence-integrity |
+| Worker claims a human/conductor bead in the readiness gap | G18 gate-human-beads-before-workers |
 
 ## Certify
 

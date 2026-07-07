@@ -8,12 +8,15 @@
    - `ROADMAP.md`
    - `docs/README.md`
    - relevant `docs/context/**`
+   - the repo's canonical vocabulary source if present — `CONTEXT-MAP.md`, a root `CONTEXT.md`, or a domain model / glossary
    - existing `VISION.md`, if present
 2. Ask only unresolved grill questions from [REFERENCE.md](REFERENCE.md).
 3. Ask one question at a time and provide a recommended answer.
 4. Stop once the answers close off obvious unintended branches; do not collapse to PRD/spec depth.
-5. Create root `VISION.md` from the collapsed answers.
-6. Wire `AGENTS.md` and the docs index so agents read `VISION.md` before substantial work.
+5. Draft root `VISION.md` from the collapsed answers.
+6. Set the canonical vocabulary (see [REFERENCE.md](REFERENCE.md) Canonical Vocabulary): align every load-bearing term to the repo's existing vocabulary source, or — if none exists — add a concise `## Glossary` at the end of `VISION.md`. One canonical name per concept, plain language, no drifting synonyms.
+7. Stress test before finalizing (see [REFERENCE.md](REFERENCE.md) Stress Test): sort every load-bearing claim into a durable constraint, an explicitly-labelled north-star direction, or a measurable present-truth claim. Reframe or cut any aspiration asserted as present truth that no one could measure today.
+8. Wire `AGENTS.md` and the docs index so agents read `VISION.md` before substantial work.
 
 ## Apply
 
@@ -47,8 +50,12 @@ Calibration validates that *this* repo's `check` actually rejects the work this 
 
 ## Review
 
-Check whether `VISION.md` is crisp, stable, and in the right layer. Move implementation detail to specs, ADRs, package docs, app docs, workflow docs, or roadmap items.
+Check whether `VISION.md` is crisp, stable, and in the right layer.
+
+1. Move implementation detail to specs, ADRs, package docs, app docs, workflow docs, or roadmap items. Route economics, go-to-market mechanism, and value attribution to the repo's strategy/business doc — state each concept in exactly one home.
+2. Run the Stress Test (see [REFERENCE.md](REFERENCE.md)): flag any load-bearing claim asserted as present truth that no one could measure today, and reframe it as a durable constraint or an explicitly-labelled north-star direction.
+3. Confirm the Canonical Vocabulary (see [REFERENCE.md](REFERENCE.md)): every load-bearing term defined once, one canonical name, plain language, aligned to the repo's vocabulary source or a concise trailing `## Glossary`.
 
 ## Update
 
-Only update `VISION.md` when the user explicitly requests a vision update. Preserve strong current principles, remove stale claims, and keep changes limited to long-lived direction.
+Only update `VISION.md` when the user explicitly requests a vision update. Preserve strong current principles, remove stale claims, and keep changes limited to long-lived direction. Re-run the Stress Test on any changed claim and keep the canonical vocabulary consistent.
