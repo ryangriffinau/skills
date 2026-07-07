@@ -195,6 +195,33 @@ Five reports (T1–T5), each diagnosed with a red repro before planning:
   resolver, used by `beads-linear-map` as the `projectCreate` default (`--team`
   overrides). Absent + `--create` → clear error naming the exact profile line to add.
 
+## 2c. Drift reconciliation (pre-conduct scan, 2026-07)
+
+A scan before conducting found the **conductor track had moved under this plan**, on two axes:
+
+- **Committed (main — PR #10 + #9 + #11):** guards **G14–G19** landed. Crucially
+  **G18 (gate-human-beads-before-workers) IS this plan's encode-time gating (V5 #14)**, and
+  **G15 is already `no-subagent-fanout`** — so the planned "G15 plan-vs-graph-fence" is
+  **dropped** (it would collide *and* duplicate G18); **G6** already covers #15;
+  **G19 (whole-PR sweep)** now feeds V9. `engineering-review` (#9) and `project-vision`
+  v1.2.0 (#11) also landed — V11's `lint-skills` covers them, no conflict. main is merged
+  into this branch.
+- **Uncommitted WIP, adopted by this session** (no parallel session running): 101 insertions
+  across the conductor skill + both prompts — the full **G19** section,
+  **human-approval-gate encoding and deletion-stub-manifest encoding in `p-plan-to-beads`**,
+  and worker-loop refinements. **Folded in + committed** (`ad20194`; conductor tests green).
+
+**Net effect on the units:**
+- **V5** reframed: "add conductor guards" → **residuals + coherence**. Only #13
+  (register-before-lease), #17b (journal-command-strings — which blocked this very encode),
+  #18 (one-worker-identity) remain genuinely uncovered; then verify the folded skill is
+  coherent. **No new G15.**
+- **V6** trimmed: the `p-plan-to-beads` gating is folded, so V6 keeps only the cheatsheet
+  `br`-flag table + the #9 resolver-path fallback.
+- **V9** gains the **G19 whole-PR sweep** (`git diff origin/main...HEAD` → `ubs --files`).
+- **V1 / V2 / V3 / V4 / V7 / V8 / V11 / V12 / V13** — untouched; the teammate's real bugs
+  live here.
+
 ## 3. Sequencing
 
 Parallel roots: V1, V2, V3, V4, V5, V7, V11 · V6←V5 (shared p-plan-to-beads file) ·
