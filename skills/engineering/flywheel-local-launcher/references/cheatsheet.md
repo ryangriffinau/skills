@@ -42,6 +42,8 @@ The core loop runs with just Agent Mail + `br` + `bv` and a couple of agents; **
 ### Stages 3–5 — the swarm
 Each agent loops: `bv` → reserve files via Agent Mail → `cass pack` → implement + test → `ubs --staged --fail-on-warning` → **`/p-fresh-eyes-review`** → `br close` → **commit + push immediately** (§4). Launch + monitor in §3.
 
+> **Case A migrations:** the swarm's decommission of the old system is **exhaustive** — every entrypoint (task state, package scripts, CI workflows, tooling, docs) archived, with a `grep` proving zero live references outside `archive/`. See the launcher SKILL.md Case A checklist.
+
 ---
 
 ## 3. Launch & monitor the swarm

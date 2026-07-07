@@ -31,7 +31,14 @@ When asked to onboard/flywheel a repo, **detect any existing workflow/issue/task
 - Quick sweep: `grep -rilE 'orchestrat|workflow|task[-_.]?json|issue[-_.]?tracker|agent[-_.]?skills' AGENTS.md docs/ scripts/ 2>/dev/null` and read `AGENTS.md`.
 
 **2. Route:**
-- **Case A — an existing custom system IS present → MIGRATION.** `fw setup` → **audit** the existing system → `/p-draft-plan` the replacement (existing system → Agent Flywheel) → `/p-plan-to-beads` → **swarm** (archive the old system, rewrite `AGENTS.md` to the flywheel protocol, wire docs, verify) → ship. **Archive, never delete** (RULE 1). *(This is exactly the platform-monorepo `bp` and customer-template `.workhorse/.agents` migrations.)*
+- **Case A — an existing custom system IS present → MIGRATION.** `fw setup` → **audit** the existing system → `/p-draft-plan` the replacement (existing system → Agent Flywheel) → `/p-plan-to-beads` → **swarm** → ship. **Archive, never delete** (RULE 1). *(This is exactly the platform-monorepo `bp` and customer-template `.workhorse/.agents` migrations.)*
+  - **The decommission step is exhaustive** — retire *every* entrypoint of the old system, not just add the new one. Enumerate and archive/remove each:
+    - **task/issue state** — `.workhorse/`, `.backpocket/`, `*/orchestrator/tasks/*.json` → `git mv` to `archive/`
+    - **package scripts** — `package.json` entries like `*-outbox`, `bp:*` → remove
+    - **CI workflows** — `.github/workflows/*-sync.yml` and friends → remove
+    - **tooling scripts** — `tooling/scripts/*-linear-*.ts` etc. → `git mv` to `archive/`
+    - **docs** — pages referencing the old workflow → update or archive
+  - **Completion criterion (exhaustive, not "looks done"):** `grep -rl '<old-system-token>'` finds **zero live references outside `archive/`**. *(Skip this and you get platform-monorepo's residual `.backpocket/{evals,orchestrator,website-generation}` — 18 files that survived the `bp` migration and had to be cleaned up later.)*
 - **Case B — no existing system → GREENFIELD.** `fw setup` → add the flywheel-protocol `AGENTS.md` snippet (confirm first) → done, the repo is flywheel-ready. Then plan + swarm the repo's actual **feature** work (not a migration).
 
 **3. Always human-confirmed:** which case it is (propose, confirm), and — for team repos — the Linear project mapping (1 beads epic ↔ 1 Linear project).
