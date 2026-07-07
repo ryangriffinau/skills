@@ -72,5 +72,5 @@ audit-trail and documentation that safety tooling should encourage.
 
 ---
 
-**Posting record:** _not yet posted — awaiting operator approval._
-Posted URL: _n/a_
+**Posting record:** Posted 2026-07-07 after operator approval.
+Posted URL: https://github.com/Dicklesworthstone/destructive_command_guard/issues/180
