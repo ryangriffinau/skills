@@ -60,6 +60,13 @@ field() {
   printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -1 | sed "s/\"$2\":\"//; s/\"$//"
 }
 
+parent_child_depends_on() {
+  local line="$1" epic="$2" compact escaped
+  compact="$(printf '%s' "$line" | tr -d '[:space:]')"
+  escaped="$(json_escape "$epic")"
+  printf '%s' "$compact" | grep -Fq "\"depends_on_id\":\"$escaped\",\"type\":\"parent-child\""
+}
+
 resolve_profile() {
   local repo_abs="$1"
   eval "$("$SCRIPT_DIR/flywheel-profile.sh" --repo "$repo_abs" 2>/dev/null)" || true
@@ -111,10 +118,13 @@ graphql_body() {
 
 mapped_epic_stats() {
   local epic="$1" issues_jsonl="$2" line id status
+  local metadata_total=0 metadata_closed=0 metadata_blocked=0
+  local dotted_total=0 dotted_closed=0 dotted_blocked=0
   total=0
   closed=0
   blocked=0
   epic_title=""
+  child_mode="no-children"
   while IFS= read -r line || [ -n "$line" ]; do
     id="$(field "$line" id)"
     [ -n "$id" ] || continue
@@ -122,15 +132,32 @@ mapped_epic_stats() {
       epic_title="$(field "$line" title)"
       continue
     fi
-    case "$id" in
-      "$epic".*) ;;
-      *) continue ;;
-    esac
-    total=$((total + 1))
     status="$(field "$line" status)"
-    [ "$status" = "closed" ] && closed=$((closed + 1))
-    [ "$status" = "blocked" ] && blocked=$((blocked + 1))
+    if parent_child_depends_on "$line" "$epic"; then
+      metadata_total=$((metadata_total + 1))
+      [ "$status" = "closed" ] && metadata_closed=$((metadata_closed + 1))
+      [ "$status" = "blocked" ] && metadata_blocked=$((metadata_blocked + 1))
+    fi
+    case "$id" in
+      "$epic".*)
+        dotted_total=$((dotted_total + 1))
+        [ "$status" = "closed" ] && dotted_closed=$((dotted_closed + 1))
+        [ "$status" = "blocked" ] && dotted_blocked=$((dotted_blocked + 1))
+        ;;
+    esac
   done < "$issues_jsonl"
+
+  if [ "$metadata_total" -gt 0 ]; then
+    child_mode="parent-metadata"
+    total="$metadata_total"
+    closed="$metadata_closed"
+    blocked="$metadata_blocked"
+  elif [ "$dotted_total" -gt 0 ]; then
+    child_mode="dotted-fallback"
+    total="$dotted_total"
+    closed="$dotted_closed"
+    blocked="$dotted_blocked"
+  fi
 }
 
 latest_marker_progress() {
@@ -198,6 +225,7 @@ sync_repo() {
     [ -n "$project_id" ] || continue
 
     mapped_epic_stats "$epic" "$issues_jsonl"
+    log "$repo_abs: epic $epic child-mode=$child_mode"
     if [ "$total" -eq 0 ]; then
       log "$repo_abs: epic $epic has no children in Beads; skipping"
       continue

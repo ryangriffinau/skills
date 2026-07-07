@@ -11,7 +11,7 @@ usage() {
 
 shell_quote() {
   local value="$1"
-  value="${value//\'/\'\\\'\'}"
+  value="$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
   printf "'%s'" "$value"
 }
 

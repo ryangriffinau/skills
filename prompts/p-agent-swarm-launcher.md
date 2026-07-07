@@ -27,8 +27,9 @@ feature branch — NEVER main, NEVER git worktrees.
    `ubs --staged --fail-on-warning`; a fresh-eyes self-review. NEVER watch/interactive
    modes, NEVER a persistent dev server — e2e uses the Playwright `webServer` config with
    `reuseExistingServer: true`.
-7. `br close <id>` → commit with EXPLICIT paths (Conventional Commits, lowercase subject)
-   → **push immediately** (unpushed work is invisible to the other agents).
+7. Commit with EXPLICIT paths (Conventional Commits, lowercase subject) → **push
+   immediately** → only then `br close <id>` and commit/push the tracker state. A bead is
+   not done while its work is uncommitted or unpushed.
 8. Go to 1.
 
 **Blocked?** If a bead needs something you cannot provide (external secret, deployment

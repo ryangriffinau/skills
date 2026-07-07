@@ -43,6 +43,7 @@ assert_contains "$RESOLVER_OUT" "FLYWHEEL_WORKTREES='false'" "absent profile wor
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PRECOMMIT='light'" "absent profile precommit"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PREPUSH='full'" "absent profile prepush"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_APP=''" "absent profile projection"
+assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_TEAM=''" "absent profile projection team"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_ENV_REQUIRED=''" "absent profile env required"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PM='none'" "absent profile pm"
 assert_empty "$RESOLVER_ERR" "absent profile stderr"
@@ -55,6 +56,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=heavy
 FLYWHEEL_PREPUSH=none
 FLYWHEEL_PROJECTION_APP=linear
+FLYWHEEL_PROJECTION_TEAM=WHC
 FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY, OTHER_KEY
 PROFILE
 cat > "$repo/package.json" <<'JSON'
@@ -67,6 +69,7 @@ assert_contains "$RESOLVER_OUT" "FLYWHEEL_MODE='team'" "valid profile mode"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PRECOMMIT='heavy'" "valid profile precommit"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PREPUSH='none'" "valid profile prepush"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_APP='linear'" "valid profile projection"
+assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_TEAM='WHC'" "valid profile projection team"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_ENV_REQUIRED='LINEAR_API_KEY, OTHER_KEY'" "valid profile env required"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PM='pnpm'" "packageManager pnpm"
 assert_empty "$RESOLVER_ERR" "valid profile stderr"
@@ -79,6 +82,7 @@ FLYWHEEL_WORKTREES=true
 FLYWHEEL_PRECOMMIT=slow
 FLYWHEEL_PREPUSH=yes
 FLYWHEEL_PROJECTION_APP=jira
+FLYWHEEL_PROJECTION_TEAM=bad/team
 FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY, BAD-KEY
 PROFILE
 touch "$repo/package-lock.json"
@@ -88,19 +92,23 @@ assert_contains "$RESOLVER_OUT" "FLYWHEEL_WORKTREES='false'" "invalid worktrees 
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PRECOMMIT='light'" "invalid precommit falls back"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PREPUSH='full'" "invalid prepush falls back"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_APP=''" "invalid projection falls back"
+assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_TEAM=''" "invalid projection team falls back"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_ENV_REQUIRED=''" "invalid env required falls back"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PM='npm'" "lockfile npm"
 assert_contains "$RESOLVER_ERR" "invalid FLYWHEEL_MODE=team; rm -rf /" "invalid mode warns"
 assert_contains "$RESOLVER_ERR" "invalid FLYWHEEL_PROJECTION_APP=jira" "invalid projection warns"
+assert_contains "$RESOLVER_ERR" "invalid FLYWHEEL_PROJECTION_TEAM=bad/team" "invalid projection team warns"
 assert_contains "$RESOLVER_ERR" "invalid FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY, BAD-KEY" "invalid env required warns"
 
 repo="$(new_repo partial)"
 mkdir -p "$repo/.flywheel"
-printf 'FLYWHEEL_MODE=team\n' > "$repo/.flywheel/profile"
+printf 'FLYWHEEL_MODE=team\nFLYWHEEL_PROJECTION_TEAM=\n' > "$repo/.flywheel/profile"
 run_resolver "$repo"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_MODE='team'" "partial profile override"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_PRECOMMIT='light'" "partial profile default"
+assert_contains "$RESOLVER_OUT" "FLYWHEEL_PROJECTION_TEAM=''" "partial profile projection team default"
 assert_contains "$RESOLVER_OUT" "FLYWHEEL_ENV_REQUIRED=''" "partial profile env required default"
+assert_empty "$RESOLVER_ERR" "partial profile stderr"
 
 repo="$TMP_ROOT/not-git"
 mkdir -p "$repo/.flywheel"

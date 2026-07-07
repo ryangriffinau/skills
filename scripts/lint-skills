@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+# Validate portable skill metadata and, in PR mode, require touched skills to bump version.
+set -euo pipefail
+
+ROOT="."
+BASE_REF=""
+CHECK_VERSION_BUMPS=0
+
+usage() {
+  cat <<'USAGE'
+usage: scripts/lint-skills [--root DIR] [--check-version-bumps --base-ref REF]
+
+Checks every skills/*/*/SKILL.md frontmatter with a real YAML parser when one is
+available. Local machines without PyYAML/Ruby warn and skip strict YAML parsing;
+CI must have a parser.
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --root)
+      ROOT="${2:?missing --root value}"
+      shift 2
+      ;;
+    --base-ref)
+      BASE_REF="${2:?missing --base-ref value}"
+      shift 2
+      ;;
+    --check-version-bumps)
+      CHECK_VERSION_BUMPS=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "lint-skills: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+fail() {
+  echo "lint-skills: error: $*" >&2
+  exit 1
+}
+
+warn() {
+  echo "lint-skills: warning: $*" >&2
+}
+
+lint_frontmatter_with_python() {
+  python3 - "$ROOT" <<'PY'
+from __future__ import annotations
+
+import pathlib
+import sys
+
+import yaml
+
+root = pathlib.Path(sys.argv[1])
+skill_files = sorted((root / "skills").glob("*/*/SKILL.md"))
+errors: list[str] = []
+
+for path in skill_files:
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    rel = path.relative_to(root)
+    if not lines or lines[0].strip() != "---":
+        errors.append(f"{rel}: missing opening frontmatter delimiter")
+        continue
+    try:
+        end = next(i for i, line in enumerate(lines[1:], start=1) if line.strip() == "---")
+    except StopIteration:
+        errors.append(f"{rel}: missing closing frontmatter delimiter")
+        continue
+
+    raw = "\n".join(lines[1:end]) + "\n"
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        errors.append(f"{rel}: invalid YAML frontmatter: {exc}")
+        continue
+    if not isinstance(data, dict):
+        errors.append(f"{rel}: frontmatter must parse to a mapping")
+        continue
+
+    name = data.get("name")
+    description = data.get("description")
+    if not isinstance(name, str) or not name.strip():
+        errors.append(f"{rel}: frontmatter.name must be a non-empty scalar")
+    if name != path.parent.name:
+        errors.append(f"{rel}: frontmatter.name '{name}' must match directory '{path.parent.name}'")
+    if not isinstance(description, str) or not description.strip():
+        errors.append(f"{rel}: frontmatter.description must be a non-empty scalar")
+
+if errors:
+    for error in errors:
+        print(f"lint-skills: error: {error}", file=sys.stderr)
+    sys.exit(1)
+
+print(f"lint-skills: checked {len(skill_files)} skill frontmatter files")
+PY
+}
+
+lint_frontmatter_with_ruby() {
+  ruby - "$ROOT" <<'RUBY'
+require "yaml"
+require "pathname"
+
+root = Pathname.new(ARGV.fetch(0))
+skill_files = Dir.glob(root.join("skills/*/*/SKILL.md")).sort
+errors = []
+
+skill_files.each do |file|
+  path = Pathname.new(file)
+  rel = path.relative_path_from(root).to_s
+  lines = File.read(file, encoding: "UTF-8").lines.map(&:chomp)
+  if lines.empty? || lines.first.strip != "---"
+    errors << "#{rel}: missing opening frontmatter delimiter"
+    next
+  end
+
+  finish = lines[1..]&.find_index { |line| line.strip == "---" }
+  unless finish
+    errors << "#{rel}: missing closing frontmatter delimiter"
+    next
+  end
+
+  raw = lines[1, finish].join("\n") + "\n"
+  begin
+    data = YAML.load(raw)
+  rescue Psych::SyntaxError => e
+    errors << "#{rel}: invalid YAML frontmatter: #{e.message}"
+    next
+  end
+
+  unless data.is_a?(Hash)
+    errors << "#{rel}: frontmatter must parse to a mapping"
+    next
+  end
+
+  name = data["name"]
+  description = data["description"]
+  expected_name = path.dirname.basename.to_s
+  errors << "#{rel}: frontmatter.name must be a non-empty scalar" unless name.is_a?(String) && !name.strip.empty?
+  errors << "#{rel}: frontmatter.name '#{name}' must match directory '#{expected_name}'" if name != expected_name
+  errors << "#{rel}: frontmatter.description must be a non-empty scalar" unless description.is_a?(String) && !description.strip.empty?
+end
+
+if errors.any?
+  errors.each { |error| warn "lint-skills: error: #{error}" }
+  exit 1
+end
+
+puts "lint-skills: checked #{skill_files.length} skill frontmatter files"
+RUBY
+}
+
+lint_frontmatter() {
+  if python3 -c 'import yaml' >/dev/null 2>&1; then
+    lint_frontmatter_with_python
+  elif command -v ruby >/dev/null 2>&1 && ruby -e 'require "yaml"' >/dev/null 2>&1; then
+    lint_frontmatter_with_ruby
+  elif [ "${CI:-}" = "true" ]; then
+    fail "no real YAML parser available in CI (expected PyYAML or Ruby yaml)"
+  else
+    warn "no real YAML parser available; skipping strict frontmatter parse locally"
+  fi
+}
+
+frontmatter_value_at_ref() {
+  local ref="$1" path="$2" key="$3"
+  git -C "$ROOT" show "$ref:$path" 2>/dev/null |
+    sed -n "s/^${key}:[[:space:]]*//p" |
+    head -1 |
+    sed 's/^"//; s/"$//'
+}
+
+frontmatter_value_in_worktree() {
+  local path="$1" key="$2"
+  sed -n "s/^${key}:[[:space:]]*//p" "$ROOT/$path" |
+    head -1 |
+    sed 's/^"//; s/"$//'
+}
+
+check_version_bumps() {
+  [ -n "$BASE_REF" ] || fail "--check-version-bumps requires --base-ref"
+  git -C "$ROOT" rev-parse --verify "$BASE_REF" >/dev/null 2>&1 ||
+    fail "base ref '$BASE_REF' is not available"
+
+  local changed_dirs dir skill_path base_version head_version failures=0
+  changed_dirs="$(
+    git -C "$ROOT" diff --name-only "$BASE_REF"...HEAD -- 'skills/*/*' |
+      awk -F/ '$1 == "skills" && NF >= 3 { print $1 "/" $2 "/" $3 }' |
+      sort -u
+  )"
+
+  [ -n "$changed_dirs" ] || return 0
+
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    skill_path="$dir/SKILL.md"
+    if [ ! -f "$ROOT/$skill_path" ]; then
+      echo "lint-skills: error: changed skill directory has no SKILL.md: $dir" >&2
+      failures=1
+      continue
+    fi
+
+    head_version="$(frontmatter_value_in_worktree "$skill_path" version)"
+    base_version="$(frontmatter_value_at_ref "$BASE_REF" "$skill_path" version)"
+    if [ -z "$head_version" ]; then
+      echo "lint-skills: error: $skill_path has no version field" >&2
+      failures=1
+    elif [ -n "$base_version" ] && [ "$head_version" = "$base_version" ]; then
+      echo "lint-skills: error: $dir changed but version stayed $head_version" >&2
+      failures=1
+    fi
+  done <<< "$changed_dirs"
+
+  [ "$failures" -eq 0 ] || exit 1
+}
+
+# Skills CLI risk triage, V11:
+# The launcher intentionally prints installer commands, including curl-pipe-bash examples,
+# as operator-facing setup guidance. This repository CI does not execute installers, and
+# the worker policy forbids agents from running machine installers or curl-pipe-bash.
+# Bootstrap code must keep installer execution behind explicit human confirmation.
+lint_frontmatter
+
+if [ "$CHECK_VERSION_BUMPS" -eq 1 ]; then
+  check_version_bumps
+fi

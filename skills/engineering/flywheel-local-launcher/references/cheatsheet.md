@@ -39,8 +39,22 @@ The core loop runs with just Agent Mail + `br` + `bv` and a couple of agents; **
 ### Stage 2 — Encode
 **`/p-plan-to-beads`** → epics/tasks via `br`, with deps + self-contained comments. Verify: `bv` (the TUI), or `bv ready`.
 
+**Exact `br` flags that matter in the loop:**
+
+| Action | Flags | Example |
+|---|---|---|
+| Create a bead | `-d` or `--description` | `br create "Wire launcher bootstrap" --type task -d "Context and acceptance criteria"` |
+| Update a bead description | `--description` only; short `-d` is rejected | `br update skills-123 --description "Revised context and acceptance criteria"` |
+| Close a bead | `-r` or `--reason`; not `-m` | `br close skills-123 -r "Implemented, tested, reviewed, committed"` |
+
+When changing status, never combine the force flag with a status change. Check every `br`
+exit code and keep command output visible in gating loops; do not discard output you need
+to decide whether the graph is safe to advance.
+
 ### Stages 3–5 — the swarm
 Each agent loops: `bv` → reserve files via Agent Mail → `cass pack` → implement + test → `ubs --staged --fail-on-warning` → **`/p-fresh-eyes-review`** → `br close` → **commit + push immediately** (§4). Launch + monitor in §3.
+
+> **Case A migrations:** the swarm's decommission of the old system is **exhaustive** — every entrypoint (task state, package scripts, CI workflows, tooling, docs) archived, with a `grep` proving zero live references outside `archive/`. See the launcher SKILL.md Case A checklist.
 
 ---
 

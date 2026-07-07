@@ -86,7 +86,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 
 This collection stands on others' work:
 
-- **Matt Pocock** — the [`skills`](https://github.com/mattpocock/skills) CLI that installs and updates everything here, and the craft of writing high-quality, single-purpose agent skills (his `writing-great-skills` is the reference). I install his skills (`grilling`, `tdd`, `code-review`, …) globally rather than vendor them into this repo.
+- **Matt Pocock** — the [`skills`](https://github.com/mattpocock/skills) CLI that installs and updates everything here, and the craft of writing high-quality, single-purpose agent skills (his `writing-great-skills` is the reference). I install his skills (`grilling`, `tdd`, `writing-great-skills`, …) globally rather than vendor them into this repo.
 - **Jeffrey Emanuel** — the [Agent Flywheel](https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup) (NTM, Agent Mail, beads, DCG, UBS, CASS). `flywheel-conductor` and `flywheel-local-launcher` are my implementations for driving his flywheel locally, and the planning/execution loop is his: the prompts marked `†` — `p-draft-plan`, `p-synthesize-plans`, `p-plan-to-beads`, `p-reality-check`, `p-fresh-eyes-review`, `p-agent-swarm-launcher`, `p-idea-wizard`, `p-premortem-planner` — are pulled directly from his flywheel / [Jeffrey's Prompts](https://jeffreysprompts.com/).
 - **Andrej Karpathy** — `review-council` is based on his LLM Council idea; the peer-review flow and decision ledger are mine.
 

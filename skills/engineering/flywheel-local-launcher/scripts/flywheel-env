@@ -163,7 +163,7 @@ known_registry_keys() {
 add_unique_key() {
   local key="$1" existing
   valid_key "$key" || return 0
-  for existing in "${KEYS[@]}"; do
+  for existing in "${KEYS[@]+"${KEYS[@]}"}"; do
     [ "$existing" = "$key" ] && return 0
   done
   KEYS+=("$key")
@@ -297,7 +297,7 @@ cmd_get() {
   local repo_dir key
   local -a args
   parse_repo_arg "$@"
-  args=("${PARSED_ARGS[@]}")
+  args=("${PARSED_ARGS[@]+"${PARSED_ARGS[@]}"}")
   [ "${#args[@]}" -eq 1 ] || { usage; exit 2; }
   key="${args[0]}"
   valid_key "$key" || { echo "flywheel-env: invalid key: $key" >&2; exit 2; }
@@ -314,7 +314,7 @@ cmd_check() {
   local repo_dir key status=0 required
   local -a args
   parse_repo_arg "$@"
-  args=("${PARSED_ARGS[@]}")
+  args=("${PARSED_ARGS[@]+"${PARSED_ARGS[@]}"}")
   repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
   if [ "${#args[@]}" -eq 0 ]; then
     while IFS= read -r required; do
@@ -341,7 +341,7 @@ cmd_list() {
   local args repo_dir key active source value found
   local -a args
   parse_repo_arg "$@"
-  args=("${PARSED_ARGS[@]}")
+  args=("${PARSED_ARGS[@]+"${PARSED_ARGS[@]}"}")
   [ "${#args[@]}" -eq 0 ] || { usage; exit 2; }
   repo_dir="$(repo_abs)" || { echo "flywheel-env: repo not found: $repo" >&2; exit 2; }
 
@@ -353,7 +353,7 @@ cmd_list() {
   while IFS= read -r key; do add_unique_key "$key"; done < <(env_file_keys "$(global_env_file)")
 
   printf '%-32s %-10s %-6s %s\n' "KEY" "SOURCE" "ACTIVE" "LAST4"
-  for key in "${KEYS[@]}"; do
+  for key in "${KEYS[@]+"${KEYS[@]}"}"; do
     active=""
     if resolve_key "$key" "$repo_dir"; then
       active="$RESOLVED_SOURCE"
@@ -391,7 +391,7 @@ cmd_set() {
   local repo_dir key global_value choice target value
   local -a args
   parse_repo_arg "$@"
-  args=("${PARSED_ARGS[@]}")
+  args=("${PARSED_ARGS[@]+"${PARSED_ARGS[@]}"}")
   [ "${#args[@]}" -le 1 ] || { usage; exit 2; }
   if [ ! -t 0 ] || [ ! -t 1 ]; then
     echo "flywheel-env set is human-interactive; agents use flywheel-env get/check and must not hang." >&2

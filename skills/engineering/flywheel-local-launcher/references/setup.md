@@ -19,6 +19,16 @@ curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_acc
 brew install fzf            # mainstream → brew is fine
 ```
 
+The launcher can walk this interactively:
+
+```bash
+bash <skill>/scripts/flywheel-link.sh bootstrap --dry-run  # print every command
+bash <skill>/scripts/flywheel-link.sh bootstrap            # confirm each installer/step
+```
+
+`setup` runs `preflight` first and aborts while any prerequisite is missing; run
+`bootstrap` or fix the missing tool, then rerun `setup`.
+
 **Install policy for *any* future tool:** Homebrew is the default for mainstream tools — `brew info <name>` shows `homebrew/core (bottled)` → use brew. The only carve-out: indie tools whose canonical channel is their own `install.sh` or a third-party `user/tap` (the whole Dicklesworthstone stack) → use `install.sh`. Never install one tool through two managers.
 
 `post_compact_reminder` installs a Claude Code `SessionStart` hook with matcher `compact`;
@@ -28,6 +38,25 @@ agent auth profiles: after install, snapshot the current Claude auth with
 `caam backup claude current-account`; adding a second account is manual because it requires
 the tool's normal interactive `/login` flow. Use the `install.sh` path for `caam`, not the
 third-party brew tap.
+
+### Updating installed skills
+
+After this repo changes, installed copies stay stale until you update them with the skills
+CLI:
+
+```bash
+npx skills update flywheel-local-launcher
+```
+
+`flywheel-link.sh preflight` compares the installed `flywheel-local-launcher` `SKILL.md`
+version with the local canonical skills repo when it can find one, and warns when the
+installed copy is older. Use the plain `npx skills update ...` path; the old direct-copy
+fallback is not part of the normal flow after the YAML frontmatter fix.
+
+Use **verify** for per-repo readiness checks that should finish in seconds: linked path,
+beads present, hooks/profile in place, and no obvious setup gaps. Use **certify** only for
+first-conduct or release-quality proof: it takes minutes because it launches real agents or
+otherwise proves the end-to-end journey.
 
 ### 2. Start + wire Agent Mail
 ```bash
@@ -103,6 +132,7 @@ Absence is valid and means Emmanuel defaults:
 | `FLYWHEEL_PRECOMMIT` | `light`, `heavy` | `light` |
 | `FLYWHEEL_PREPUSH` | `full`, `none` | `full` |
 | `FLYWHEEL_PROJECTION_APP` | empty, `linear` | empty |
+| `FLYWHEEL_PROJECTION_TEAM` | Linear team id or key | empty |
 | `FLYWHEEL_ENV_REQUIRED` | comma-separated env var names | empty |
 
 Package manager is detected, not stored: `package.json` `packageManager` wins; otherwise lockfiles are checked in this order: `pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`, `yarn.lock`; otherwise `none`.
@@ -120,6 +150,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=
+FLYWHEEL_PROJECTION_TEAM=
 FLYWHEEL_ENV_REQUIRED=
 ```
 
@@ -130,6 +161,7 @@ FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
 FLYWHEEL_PROJECTION_APP=linear
+FLYWHEEL_PROJECTION_TEAM=WHC
 FLYWHEEL_ENV_REQUIRED=LINEAR_API_KEY
 ```
 
@@ -152,10 +184,24 @@ Resolution order is fixed: process env > repo `.flywheel/env.local` > repo `.env
 missing a required value it should mark the bead blocked with a comment containing
 `ENV-MISSING: <NAME>`.
 
-When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the manual epic→Linear-project map (create/choose the Linear project yourself, paste its id, commit it):
+When `FLYWHEEL_PROJECTION_APP=linear`, add `.flywheel/projects.tsv` — the epic→Linear-project map:
 ```text
 customer-template-architecture-transfer-w7o	c538d7a2-a7bd-4474-a4d9-8d024d4478de
 ```
+
+Use `scripts/beads-linear-map` to hide the mapping ritual and write the tab-separated line idempotently:
+
+```bash
+scripts/beads-linear-map customer-template-architecture-transfer-w7o --project-id c538d7a2-a7bd-4474-a4d9-8d024d4478de --repo .
+scripts/beads-linear-map customer-template-architecture-transfer-w7o --create "Customer Template — Architecture Transfer" --team WHC --repo .
+```
+
+`--project-id` records an existing Linear project and does not need an API call. `--create`
+uses the Linear GraphQL API with `LINEAR_API_KEY`; this exists because Linear MCP project
+creation needs interactive OAuth and is not available to headless workers. `--team` overrides
+`FLYWHEEL_PROJECTION_TEAM`; otherwise `--create` reads `FLYWHEEL_PROJECTION_TEAM` from the
+profile and errors clearly when neither is set.
+
 Then **apply the projection** with the runnable, idempotent `scripts/beads-linear-sync --repo .`.
 It reads `LINEAR_API_KEY` through `scripts/flywheel-env get LINEAR_API_KEY --repo .`, with
 process env as a fallback if the CLI is absent. It posts a Linear project **status update**
