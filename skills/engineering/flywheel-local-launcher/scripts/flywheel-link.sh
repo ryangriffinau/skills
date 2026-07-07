@@ -259,6 +259,78 @@ guard_hook_line() {
   printf '%s\n' 'scripts/ci/file-reservation-guard.sh || exit $?'
 }
 
+append_ignore_line() {
+  local file="$1" line="$2" label="$3"
+  touch "$file"
+  if grep -Fqx "$line" "$file"; then
+    echo "  = $label already ignores $line"
+  else
+    printf '%s\n' "$line" >> "$file"
+    echo "  + $label ignores $line"
+  fi
+}
+
+plain_linter_ignore_files() {
+  local found=0
+  for file in .prettierignore .eslintignore; do
+    if [ -f "$file" ]; then
+      found=1
+      append_ignore_line "$file" ".beads/" "$file"
+      append_ignore_line "$file" ".ntm/" "$file"
+    fi
+  done
+  return "$found"
+}
+
+structured_linter_configs() {
+  local files=()
+  for file in \
+    biome.json biome.jsonc \
+    ruff.toml pyproject.toml \
+    .eslintrc .eslintrc.json .eslintrc.yaml .eslintrc.yml .eslintrc.js .eslintrc.cjs \
+    eslint.config.js eslint.config.mjs eslint.config.cjs; do
+    [ -e "$file" ] && files+=("$file")
+  done
+  if [ "${#files[@]}" -eq 0 ]; then
+    return 1
+  fi
+
+  echo "  ⚠ structured linter config detected: ${files[*]}"
+  echo "    Add ignores manually where appropriate:"
+  echo "      .beads/"
+  echo "      .ntm/"
+  return 0
+}
+
+configure_linter_ignores() {
+  echo "  Exact ignore lines for flywheel state:"
+  echo "    .beads/"
+  echo "    .ntm/"
+  plain_linter_ignore_files || true
+  structured_linter_configs || true
+}
+
+ensure_gitignore_line() {
+  local line="$1" label="$2"
+  touch .gitignore
+  if grep -Fqx "$line" .gitignore; then
+    echo "  = $label already ignored"
+  else
+    printf '%s\n' "$line" >> .gitignore
+    echo "  + $label added to .gitignore"
+  fi
+}
+
+ensure_flywheel_gitignore_entries() {
+  touch .gitignore
+  if ! grep -Fq "flywheel conductor runtime state" .gitignore; then
+    printf '\n# flywheel conductor runtime state (machine-local; see flywheel-conductor skill)\n' >> .gitignore
+  fi
+  ensure_gitignore_line ".flywheel/runtime/" ".flywheel/runtime/"
+  ensure_gitignore_line ".bv/" ".bv/"
+  ensure_gitignore_line ".ntm/" ".ntm/"
+}
+
 chain_guard_into_hook() {
   local hook="$1" label="$2" tmp guard_line
   guard_line="$(guard_hook_line)"
@@ -321,6 +393,14 @@ setup() {
   # keys this repo under ONE project, matching `ntm spawn <name>`. See references/setup.md §C.
   ( cd "${dest:-$path}"
     echo "==> br init";         br init   || echo "  (br init skipped/failed — already initialised?)"
+    echo "==> br/bv AGENTS.md injection"
+    if command -v bv >/dev/null 2>&1; then
+      bv --robot-triage >/dev/null 2>&1 \
+        && echo "  + AGENTS.md workflow block triggered; commit it as part of setup" \
+        || echo "  (bv --robot-triage skipped/failed)"
+    else
+      echo "  (bv unavailable; run bv once before the first swarm and commit any AGENTS.md change)"
+    fi
     echo "==> verification bead"
     if [ "$(br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b')" = "0" ]; then
       br create "Flywheel verification: prove the loop end-to-end" --type task --priority 3 \
@@ -333,13 +413,8 @@ setup() {
     echo "==> ntm init";        ntm init  || echo "  (ntm init skipped/failed)"
     echo "==> lease guard";     install_guard
     echo "==> .flywheel/profile"; scaffold_profile
-    echo "==> .flywheel/runtime gitignore"
-    if ! grep -qs "^\.flywheel/runtime/" .gitignore; then
-      printf '\n# flywheel conductor runtime state (machine-local; see flywheel-conductor skill)\n.flywheel/runtime/\n' >> .gitignore
-      echo "  + .flywheel/runtime/ added to .gitignore"
-    else
-      echo "  = .flywheel/runtime/ already ignored"
-    fi
+    echo "==> flywheel gitignore"; ensure_flywheel_gitignore_entries
+    echo "==> linter ignores"; configure_linter_ignores
     echo "==> AGENTS.md check"; agents_md_check
   )
   verify "$path"
