@@ -1,9 +1,9 @@
 ---
 name: flywheel-conductor
 status: drafting
-version: 0.1.0
+version: 0.2.0
 tags: [agents, flywheel, orchestration, swarm]
-updated: 2026-07-01
+updated: 2026-07-07
 description: Drive a flywheel swarm as the conductor — this agent session coordinates codex workers (spawn, poll, triage, unblock, ship) instead of an in-tmux controller pane. Use when the user asks to launch/run/drive a swarm on a beads epic, when p-plan-to-beads has just encoded an epic ready to execute, or to check on / re-kick / adopt a running swarm.
 ---
 
