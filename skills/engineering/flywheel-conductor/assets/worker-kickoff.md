@@ -20,7 +20,8 @@ LOOP CONTINUOUSLY until `br ready` is empty — never stop after one bead:
 5. Verify ONE-SHOT only: <TYPECHECK_CMD>; the bead's own tests; `ubs --staged --fail-on-warning`;
    fresh-eyes self-review. NEVER watch modes, NEVER a persistent dev server (e2e uses the
    Playwright webServer config with reuseExistingServer).
-6. `br close <id>` → commit EXPLICIT paths → push immediately.
+6. Commit EXPLICIT paths → push immediately → only then `br close <id>` and commit/push
+   the tracker state. A bead is not done while its work is uncommitted or unpushed.
 7. Go to 1.
 
 If a bead is blocked on something you cannot provide (external secret, missing deployment

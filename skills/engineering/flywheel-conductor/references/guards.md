@@ -36,16 +36,25 @@ was found; documented in `ntm-flywheel-config` memory + setup.md §A.3 caveat.
 ## G3 — env-preflight
 
 **Signal:** A bead blocks with "missing env var X in deployment"; `convex codegen` (or
-similar) aborts naming a variable; workers block honestly and move on.
+similar) aborts naming a variable; workers block honestly and move on; a prod-data bead
+uses a CLI flag such as `--prod` while an environment variable can silently redirect the
+target deployment.
 **Diagnosis:** Deployment-level env (Convex env, etc.) is not settable by anonymous worker
 agents — and process-only env does not satisfy deployment validation. Self-generated
-secrets (signing keys) don't need the user; platform keys do.
+secrets (signing keys) don't need the user; platform keys do. Some CLIs also let process
+env override explicit target flags, so preflight must check variables that change the
+deployment identity, not just variables required by application code.
 **Fix:** Conductor sets it: self-generated → `openssl rand -base64 32` then the platform's
 `env set`; platform-issued → surface to the user, park only the affected chain, keep other
 beads flowing. Then unblock the bead with a comment and nudge. Journal the **name only**.
-Prevention: Step 1 env-preflight reads profile-declared required vars before spawning.
+Prevention: Step 1 env-preflight reads profile-declared required vars before spawning. For
+prod-read beads, require `CONVEX_DEPLOY_KEY` to be unset or prove the resolved deployment
+URL with `bunx convex dashboard --prod --no-open`; record that URL next to the exact data
+command in the bead/doc evidence.
 **Evidence:** AT session — A1 blocked twice (BETTER_AUTH_SECRET placeholder, then
 RESEND_API_KEY); conductor `bunx convex env set` + unblock resumed the auth chain.
+customer-kingfield 2026-07-05 — `CONVEX_DEPLOY_KEY` overrode Convex `--prod`, causing a
+worker to read non-prod data while claiming prod facts.
 
 ## G3.5 — codex-update-preflight
 
@@ -94,12 +103,16 @@ these interfaces verbatim.
 panes idle; no bead moves to in_progress within one check-in.
 **Diagnosis:** ntm's assignment push is unreliable; `[coordinator] auto_assign` may not
 feed either. The dependable mechanism is workers **self-claiming** via `br ready` — which
-only happens if the kickoff loop says so and the workers act on it.
-**Fix:** `ntm send <session> --cod "<claim nudge>"` naming the ready bead ids; verify a
-claim lands within the next check-in; if a specific worker idles while others hold locks,
-hand it a named non-conflicting bead (G9).
+only happens if the kickoff loop says so and the workers act on it. Broadcast sends can
+type into an idle Codex TUI without submitting, leaving the nudge sitting at the prompt.
+**Fix:** Prefer targeted pane re-prompts with `tmux send-keys`, a short wait, and Enter
+twice. If you use `ntm send --cod`, treat it as advisory: verify a claim lands within the
+next check-in, and if none does, re-prompt targeted. If a specific worker idles while
+others hold locks, hand it a named non-conflicting bead (G9).
 **Evidence:** AT session — hit twice: spawn assigned 0 (workers idle until nudged), and a
 mid-run stall with 4 ready + 0 claiming.
+customer-kingfield 2026-07-05 — `ntm send --cod` broadcasts repeatedly left text
+unsubmitted on idle Codex panes; targeted double-Enter re-prompts were reliable.
 
 ## G7 — respawn-dead-panes
 
@@ -150,10 +163,14 @@ closed bead's work is missing; often after resets, respawns, or conductor restar
 **Diagnosis:** Interrupted workers (or conductor resets) desync the graph from reality.
 The graph is the source of truth for *scheduling*, but the tree is the truth for *work*.
 **Fix:** Instruct the claiming worker: verify the existing work (typecheck + tests), commit
-with explicit paths, close the bead — never redo work that exists. Conductor includes this
-rule in every re-kick prompt after any reset.
+with explicit paths, push it, then close the bead — never redo work that exists. A bead is
+not done until its implementation and tracker state are committed and pushed; closed beads
+with dirty scope paths are a G10 signal and must be reopened/reclaimed before new work.
+Conductor includes this rule in every re-kick prompt after any reset.
 **Evidence:** AT session — V1.1 colocation was implemented, then its bead was reset during
 the xhigh→high respawn; the next wave verified + committed + closed it instead of redoing.
+customer-kingfield 2026-07-05 — CONF-2 was closed with a 32-file relocation uncommitted
+and invisible to other agents until reopened and explicitly committed.
 
 ## G11 — serial-chains
 
@@ -230,10 +247,13 @@ the operator says they will not read beads.
 **Diagnosis:** Beads are AI-facing tracking artifacts. Humans act on a proactive, self-
 contained explanation, not on bead prose. "Beads are for AI, not human review" (operator).
 **Fix:** Render every human task as a chat walkthrough: what, why, exact steps, decision
-options, and worked examples where judgment is required. The bead only tracks state; the
-chat message is the interface.
+options, and worked examples where judgment is required. Present the full evidence being
+judged; truncation is allowed only for clearly-marked summaries, never for source text or
+other adjudication evidence. The bead only tracks state; the chat message is the interface.
 **Evidence:** customer-kingfield 2026-07-05 — labeling + approval tasks pointed at bead ids
 stalled until re-presented as chat walkthroughs with examples.
+customer-kingfield 2026-07-07 — truncated message excerpts made the operator suspect a
+pipeline truncation bug; the dataset had full text, but the chat evidence was incomplete.
 
 ## G17 — evidence-integrity (live-system claims carry their proof; compromised evidence fails loud)
 
@@ -266,6 +286,22 @@ human-labeled beads and gate them before the next worker claim.
 **Evidence:** customer-kingfield 2026-07-05 — H2 (labeling) and MIRROR-2 (approval) surfaced
 into `br ready` on a blocker close and had to be gated reactively before a worker grabbed them.
 
+## G19 — whole-pr-sweep (staged-only checks miss accumulated PR risk)
+
+**Signal:** Every bead ran `ubs --staged --fail-on-warning`, but the final PR/reality-check
+still finds warnings or cross-file regressions across the accumulated branch diff.
+**Diagnosis:** Per-bead staged checks are necessary but local: they only see the currently
+staged patch. A long swarm PR can accumulate interactions, generated changes, stale docs,
+or warning classes that no single staged diff exposed.
+**Fix:** The broad reality-check or ship bead runs a whole-PR sweep over changed source
+files, for example `git diff origin/master...HEAD --name-only -- "packages/**/*.ts"`,
+filtering to files that still exist, then `ubs --files $(cat <file-list>)`. Triage every
+warning: fix real bug classes, or record a concise false-positive rationale in the bead/PR.
+Keep per-bead `ubs --staged --fail-on-warning`; the whole-PR sweep is an additional gate.
+**Evidence:** customer-kingfield 2026-07-07 — PR126 had 0 staged-warning commits, but a
+whole-PR UBS sweep found dozens of warning candidates that required explicit triage before
+merge.
+
 ## 2026-07 strengthenings to existing guards (customer-kingfield dogfood)
 
 - **G3 (env-preflight):** also unset/validate `CONVEX_DEPLOY_KEY` for prod-read beads (it
@@ -280,6 +316,9 @@ into `br ready` on a blocker close and had to be gated reactively before a worke
   explicit scope paths — spot-check `git status` on every close; flag closed-bead-with-dirty-
   scope-paths. (b) beads readiness recompute is intermittent on last-blocker close; flag any
   open/blocked bead whose blocking deps are all closed as a stale-status auto-open candidate.
+- **G13 (conductor-survivability):** usage-limit auto-resume is a planned extension, not part
+  of this guard yet. If adopted, it must parse the reset time, re-take the conductor lease on
+  wake, and cap relaunch attempts.
 
 ## Encoding-side lessons (belong to plan-to-beads, noted here for cross-reference)
 
@@ -290,3 +329,5 @@ into `br ready` on a blocker close and had to be gated reactively before a worke
   (path, size, reason) rather than silent stub files; a standing DELETE-STUBS bead executes
   after human approval; every human gate / ship bead presents the deleted-and-stubbed file
   manifest.
+- Human-adjudication beads must instruct the presenter to show full source evidence in chat;
+  summarized excerpts are allowed only in addition to the full evidence, not instead of it.
