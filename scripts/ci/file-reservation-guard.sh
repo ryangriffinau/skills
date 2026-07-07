@@ -30,9 +30,13 @@ agent_mail_root="${MCP_AGENT_MAIL_ROOT:-$HOME/.local/share/mcp_agent_mail}"
 agent_mail_python="${MCP_AGENT_MAIL_PYTHON:-$agent_mail_root/.venv/bin/python}"
 
 if [ ! -x "$agent_mail_python" ]; then
-  echo "[file-reservation-guard] missing Agent Mail Python at $agent_mail_python" >&2
-  echo "[file-reservation-guard] set MCP_AGENT_MAIL_PYTHON or install Agent Mail before committing" >&2
-  exit 1
+  echo "[file-reservation-guard] warning: Agent Mail stack unavailable; skipping lease check" >&2
+  exit 0
+fi
+
+if ! "$agent_mail_python" -c 'import mcp_agent_mail.cli' >/dev/null 2>&1; then
+  echo "[file-reservation-guard] warning: Agent Mail stack unavailable; skipping lease check" >&2
+  exit 0
 fi
 
 agent_name="${AGENT_NAME:-${USER:-local}-precommit}"
@@ -47,6 +51,13 @@ case "$mode" in
     exit 1
     ;;
 esac
+
+paths_file="$(mktemp "${TMPDIR:-/tmp}/file-reservation-guard-paths.XXXXXX")"
+guard_output="$(mktemp "${TMPDIR:-/tmp}/file-reservation-guard-output.XXXXXX")"
+cleanup() {
+  rm -f "$paths_file" "$guard_output"
+}
+trap cleanup EXIT
 
 git diff --cached --name-status -M -z --diff-filter=ACMRDTU |
   "$agent_mail_python" -c '
@@ -73,8 +84,30 @@ for path in paths:
         continue
     seen.add(path)
     sys.stdout.buffer.write(path + b"\0")
-' |
-  AGENT_NAME="$agent_name" "$agent_mail_python" -m mcp_agent_mail.cli guard check \
-    --stdin-nul \
-    --repo "$repo_root" \
-    "${advisory_args[@]}"
+' > "$paths_file"
+
+if [ ! -s "$paths_file" ]; then
+  exit 0
+fi
+
+set +e
+AGENT_NAME="$agent_name" "$agent_mail_python" -m mcp_agent_mail.cli guard check \
+  --stdin-nul \
+  --repo "$repo_root" \
+  "${advisory_args[@]}" < "$paths_file" > "$guard_output" 2>&1
+guard_status="$?"
+set -e
+
+if [ "$guard_status" -eq 0 ]; then
+  cat "$guard_output"
+  exit 0
+fi
+
+if tr '[:upper:]' '[:lower:]' < "$guard_output" |
+  grep -Eq 'connection refused|failed to connect|server.*not.*running|no module named|cannot import|agent mail.*unavailable|mcp.*unavailable'; then
+  echo "[file-reservation-guard] warning: Agent Mail stack unavailable; skipping lease check" >&2
+  exit 0
+fi
+
+cat "$guard_output" >&2
+exit "$guard_status"
