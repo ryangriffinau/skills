@@ -1,9 +1,9 @@
 ---
 name: flywheel-local-launcher
 status: drafting
-version: 0.4.0
+version: 0.5.0
 tags: [agents, flywheel, orchestration, setup]
-updated: 2026-07-07
+updated: 2026-07-08
 description: "Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, runs per-repo init, and routes onboarding by first detecting an existing workflow system: Case A migration vs Case B greenfield setup."
 ---
 
@@ -50,7 +50,7 @@ Run the bundled script `scripts/flywheel-link.sh` from inside the target repo:
 | Command | Does |
 |---|---|
 | `bootstrap [--dry-run] [--yes]` | Machine bootstrap helper: confirm/run the per-tool installers, wire Agent Mail/Codex MCP, seed ntm config, build CASS, and rerun preflight |
-| `preflight` | Verify stack installed (ntm, agent-mail, br, bv, dcg, cass, ubs, claude, codex) + Agent Mail server on `:8765` + `projects_base` set; report each gap with its fix |
+| `preflight` | Verify stack installed (ntm, agent-mail, br, bv, dcg, cass, ubs, claude, codex) + Agent Mail server on `:8765` + `projects_base` set; report each gap with its fix. Also runs advisory (non-fatal) probes: installed-skill staleness, **stack-tool currency** (e.g. a stale `dcg` that would chase already-fixed bugs), and codex/claude auth. |
 | `link [path]` | Symlink a repo (default: cwd) into `projects_base` under its basename |
 | `setup [path]` | `link` + `br init` (+ a starter **verification bead**) + `ntm init` + lease guard + `.flywheel/profile`, check AGENTS.md, then run `verify` |
 | `verify [path]` | **Success test** — confirm the repo is linked into `projects_base` (so `ntm spawn` resolves it) AND holds a completable bead; the proof the flywheel is live here. (`ntm list` shows active *sessions*, not linked projects — a repo can be flywheel-ready with no running swarm.) |

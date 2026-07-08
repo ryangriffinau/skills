@@ -188,6 +188,54 @@ probe_skill_staleness() {
   fi
 }
 
+# --- Stack-tool currency (advisory; never fails preflight) -------------------
+# A currency checker prints "<installed> <latest> <update-command>" on one line,
+# or nothing to skip (tool absent, no check subcommand, or network/parse miss).
+# Add a tool by writing currency_check_<tool> and appending "<tool>:<fn>" to the
+# list in probe_stack_currency. dcg is first because a stale guard sends agents
+# chasing already-fixed false positives (2026-07: we sat 2 months behind and
+# filed an upstream bug that the current release had already fixed).
+currency_check_dcg() {
+  command -v dcg >/dev/null 2>&1 || return 0
+  local installed latest
+  # `dcg --version` is the authoritative binary version; the "Current" line from
+  # `dcg update --check` can lag it, so compare the binary against Latest. No
+  # --refresh: honour dcg's own 24h cache so repeated preflights stay cheap.
+  installed="$(dcg --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  latest="$(dcg update --check 2>/dev/null | sed -n 's/.*[Ll]atest version:[[:space:]]*//p' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  [ -n "$installed" ] && [ -n "$latest" ] || return 0
+  printf '%s %s dcg update' "$installed" "$latest"
+}
+
+probe_stack_currency() {
+  if [ "${FLYWHEEL_PREFLIGHT_SKIP_CURRENCY:-0}" = "1" ]; then
+    return 0
+  fi
+  local timeout_seconds="${FLYWHEEL_PREFLIGHT_PROBE_TIMEOUT:-15}"
+  case "$timeout_seconds" in
+    ''|*[!0-9]*) timeout_seconds=15 ;;
+  esac
+  local spec tool checker line rest installed latest cmd
+  for spec in "dcg:currency_check_dcg"; do
+    tool="${spec%%:*}"
+    checker="${spec#*:}"
+    command -v "$tool" >/dev/null 2>&1 || continue
+    run_probe_command "$timeout_seconds" "$checker" || continue
+    line="$PROBE_OUTPUT"
+    [ -n "$line" ] || continue
+    installed="${line%% *}"
+    rest="${line#* }"
+    latest="${rest%% *}"
+    cmd="${rest#* }"
+    [ -n "$installed" ] && [ -n "$latest" ] || continue
+    if version_lt "$installed" "$latest"; then
+      echo "  ⚠ $tool update available (installed $installed < latest $latest) — run: ${cmd:-$tool update}"
+    else
+      echo "  ✓ $tool $installed (current)"
+    fi
+  done
+}
+
 preflight() {
   local missing=0
   echo "Flywheel preflight:"
@@ -202,6 +250,7 @@ preflight() {
   local b; b="$(base || true)"
   if [ -n "$b" ] && [ -d "$b" ]; then echo "  ✓ projects_base = $b"; else echo "  ✗ projects_base unset — run: ntm config set projects-base <dir>"; missing=1; fi
   probe_skill_staleness
+  probe_stack_currency
   probe_auth_state
 
   if [ "$missing" -ne 0 ]; then

@@ -116,6 +116,37 @@ PATH="$TMP_ROOT/bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" FLYWHE
 assert_output_contains "$preflight_out" "flywheel-local-launcher installed skill is stale" "staleness warning"
 assert_output_contains "$preflight_out" "npx skills update flywheel-local-launcher" "staleness update command"
 
+# --- stack currency probe: stale dcg emits an advisory, exit code unchanged --
+currency_bin="$TMP_ROOT/currency-bin"
+mkdir -p "$currency_bin"
+cp "$TMP_ROOT/bin/"* "$currency_bin/"
+cat > "$currency_bin/dcg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  "--version ") echo "0.5.1" ;;
+  "update --check") printf 'Checking for updates...\nCurrent version: 0.5.1\nLatest version:  0.6.5\n' ;;
+  *) exit 0 ;;
+esac
+SH
+chmod +x "$currency_bin/dcg"
+currency_out="$TMP_ROOT/currency-out"
+set +e
+PATH="$currency_bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 FLYWHEEL_SKILLS_REPO="$canonical" \
+  /bin/bash "$installed/scripts/flywheel-link.sh" preflight >"$currency_out" 2>&1
+currency_status="$?"
+set -e
+assert_output_contains "$currency_out" "dcg update available (installed 0.5.1 < latest 0.6.5)" "dcg currency advisory"
+assert_output_contains "$currency_out" "run: dcg update" "dcg currency update command"
+[ "$currency_status" -eq 0 ] || fail "currency: stale dcg must not change preflight exit code"
+
+# currency probe honours the skip flag (no advisory when disabled)
+currency_skip_out="$TMP_ROOT/currency-skip-out"
+PATH="$currency_bin:/bin:/usr/bin" NTM_PROJECTS_BASE="$TMP_ROOT/projects" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 FLYWHEEL_PREFLIGHT_SKIP_CURRENCY=1 FLYWHEEL_SKILLS_REPO="$canonical" \
+  /bin/bash "$installed/scripts/flywheel-link.sh" preflight >"$currency_skip_out" 2>&1
+if grep -Fq "dcg update available" "$currency_skip_out"; then
+  fail "currency: skip flag should suppress the advisory"
+fi
+
 missing_out="$TMP_ROOT/missing-preflight-out"
 set +e
 PATH="/bin:/usr/bin" FLYWHEEL_PREFLIGHT_SKIP_AUTH_PROBES=1 bash "$LINKER" preflight >"$missing_out" 2>&1
