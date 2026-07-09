@@ -1,9 +1,9 @@
 ---
 name: flywheel-local-launcher
 status: drafting
-version: 0.5.0
+version: 0.5.1
 tags: [agents, flywheel, orchestration, setup]
-updated: 2026-07-08
+updated: 2026-07-09
 description: "Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, runs per-repo init, and routes onboarding by first detecting an existing workflow system: Case A migration vs Case B greenfield setup."
 ---
 
@@ -31,12 +31,12 @@ When asked to onboard/flywheel a repo, **detect any existing workflow/issue/task
 **2. Route:**
 - **Case A — an existing custom system IS present → MIGRATION.** `fw setup` → **audit** the existing system → `/p-draft-plan` the replacement (existing system → Agent Flywheel) → `/p-plan-to-beads` → **swarm** → ship. **Archive, never delete** (RULE 1). *(This is exactly the platform-monorepo `bp` and customer-template `.workhorse/.agents` migrations.)*
   - **The decommission step is exhaustive** — retire *every* entrypoint of the old system, not just add the new one. Enumerate and archive/remove each:
-    - **task/issue state** — `.workhorse/`, `.backpocket/`, `*/orchestrator/tasks/*.json` → `git mv` to `archive/`
+    - **task/issue state** — `.workhorse/`, `*/orchestrator/tasks/*.json`, per-task JSON state → **migrate to beads** (`br create`, preserving spec/PR/acceptance), then `git mv` the source to `archive/`. **Audit first:** a top-level dir like `.backpocket/` can hold *live* infra/DX alongside dead task-state — archive only the paths a repo-wide grep proves unreferenced (see completion criterion), never the whole dir on its name.
     - **package scripts** — `package.json` entries like `*-outbox`, `bp:*` → remove
     - **CI workflows** — `.github/workflows/*-sync.yml` and friends → remove
     - **tooling scripts** — `tooling/scripts/*-linear-*.ts` etc. → `git mv` to `archive/`
     - **docs** — pages referencing the old workflow → update or archive
-  - **Completion criterion (exhaustive, not "looks done"):** `grep -rl '<old-system-token>'` finds **zero live references outside `archive/`**. *(Skip this and you get platform-monorepo's residual `.backpocket/{evals,orchestrator,website-generation}` — 18 files that survived the `bp` migration and had to be cleaned up later.)*
+  - **Completion criterion (exhaustive, not "looks done"):** `grep -rl '<old-system-token>'` finds **zero live references outside `archive/`** — *and* every path you plan to archive is confirmed unreferenced by live code/skills/docs before you move it. *(Real example: platform-monorepo's `.backpocket/` looked like `bp`-migration residue, but the audit showed `.backpocket/{website-generation,websites,evals}` is **live infra/DX** — read by live agent skills, the cursor runbook, and `backpocket-cli` code. Only `.backpocket/orchestrator/tasks/*.json` was dead task-state; it was migrated to beads and archived. Archiving the whole dir on the "residue" assumption would have broken live workflows. Audit before you archive.)*
 - **Case B — no existing system → GREENFIELD.** `fw setup` → add the flywheel-protocol `AGENTS.md` snippet (confirm first) → done, the repo is flywheel-ready. Then plan + swarm the repo's actual **feature** work (not a migration).
 
 **3. Always human-confirmed:** which case it is (propose, confirm), and — for team repos — the Linear project mapping (1 beads epic ↔ 1 Linear project).
