@@ -130,6 +130,69 @@ can point at an entirely different config file. Omission cannot.
 Clean sweep otherwise: allowlist empty; heredoc settings are defaults; no `[agents.*]` overrides; the
 only project `.dcg.toml` anywhere under `~/Code/github` or `~/Documents` is InStrand's.
 
+### 2.0.3 DCG primitives we should be using (discovered in review; changes the install design)
+
+Read from `dcg init`'s full sample config. These are native facilities we were about to re-invent:
+
+| Primitive | What it gives us |
+| --- | --- |
+| **`${repo_root}` in `custom_paths`** — "nearest ancestor of cwd containing a .git directory; entries are silently skipped when cwd is outside any repo, so a config that auto-discovers repo-local packs is safe to deploy via MDM" | **Project-level install is first-class.** One user-config line `${repo_root}/.dcg/packs/*.yaml` makes DCG auto-discover repo-local packs in *any* repo. No per-repo `.dcg.toml` needed. This is the `--project` flag's mechanism. |
+| **`[policy] default_mode` (`deny`/`warn`/`log`) + `observe_until`** | Warn-mode rollout window — ship to a teammate in `warn` first, let it flip to `deny` after a date. Ideal for team adoption without surprise blocks. |
+| **`[policy.packs]` / `[policy.rules]`** — per-pack and per-rule mode override; "Critical rules are only loosened via explicit per-rule overrides" | The **robust, scoped relaxation primitive** — far safer than `safe_patterns`, which mask globally and can rescue an unrelated deny. |
+| **`dcg allow <rule_id> --project --reason "..."`** — project-scoped allowlist (defaults to project inside a git repo), reason **mandatory** | Auditable per-repo exception, keyed by rule id, with a recorded justification. |
+| **`self_heal_hook`** — re-registers the hook in settings.json every invocation | Confirms hook wiring is DCG's own concern (§2.0.1). We were right to drop it. |
+
+**Packs have NO parameterization.** The schema is fixed (`id, name, version, description, keywords,
+destructive_patterns, safe_patterns`) — no variables, no metadata, no templating. So a
+"supply your staging deployment name" pack option is **not buildable**. The nearest robust
+equivalent is rule-scoped + repo-scoped, not deployment-name-scoped (see §2.0.4).
+
+### 2.0.4 Staging relaxation — decision B, with a scoped escape hatch
+
+**Default stays deny-all-prod** (Ryan's option B): `CONVEX_DEPLOYMENT=prod:` remains a prod signal.
+This is deliberately conservative because a Convex `prod:`-tier deployment *is* production-tier
+infrastructure even when a team uses it as staging.
+
+**The wrinkle, live in platform-monorepo:** `deploy:staging` is
+`CONVEX_DEPLOYMENT=prod:oceanic-walrus-760 convex dev --once …` — staging on a **prod-tier**
+deployment. So the raw expanded command is denied. Practical blast radius is small: the sanctioned
+wrapper `pnpm run deploy:staging` is **allowed** (see §2.0.5 — DCG never sees the expansion).
+
+**If a repo genuinely needs relaxation**, use DCG's own scoped primitive rather than weakening the
+pack for everyone:
+
+```bash
+dcg allow local.convex_prod_deploy_guard:prod-targeted-convex-dev \
+  --project --reason "oceanic-walrus-760 is a prod-tier deployment used as staging"
+```
+
+or, for a softer signal, in the repo's `.dcg.toml`:
+
+```toml
+[policy.rules]
+"local.convex_prod_deploy_guard:prod-targeted-convex-dev" = "warn"
+```
+
+**Honest granularity ceiling:** both are *rule*-scoped within a repo — they cannot be narrowed to one
+deployment name, because packs take no parameters and Rust regex has no lookaround for
+"prod: but not this one". A repo that relaxes this rule relaxes it for every prod-targeted
+`convex dev` in that repo. Accept that, or don't relax it and use the `pnpm run` wrapper.
+
+### 2.0.5 The hook does NOT see inside package scripts (correction)
+
+DCG is a PreToolUse hook on the **agent's Bash tool**. It evaluates only the command string the agent
+runs. When that command spawns a subprocess — `pnpm run deploy:staging` → `convex dev …` — **the
+inner command is never evaluated and never blocked.** `pnpm run deploy:prod` is caught only because
+that literal string matches `deploy:prod`, not because DCG saw the underlying deploy.
+
+Consequences to hold honestly:
+- A script renamed innocuously that internally runs a prod deploy is **invisible** to the guard.
+- Wrapper scripts are therefore both the mitigation (staging works) and a gap (indirection hides).
+- **Complement:** `dcg scan <paths>` scans *files* for destructive commands (it has
+  `install-pre-commit`, `--staged`, `--git-diff`, `--fail-on`). Run it in CI/pre-commit over
+  `package.json` and `.github/workflows/**` to catch what the runtime hook structurally cannot.
+  Add as a task (§8/T11).
+
 ### 2.1 Global scope (confirms decisions D1/D2 — the whole point)
 
 DCG's user-level config (`~/.config/dcg/config.toml`) is **machine-global**: the hook evaluates *every* agent Bash command regardless of which project directory it runs in. And per §2.0.2 (verified), a project `.dcg.toml` at a git root **adds to** the enabled set rather than replacing it — so a project config cannot silently drop a global guard by omission. Installing the `full` profile at the user level therefore applies the Convex prod-deploy guard (and every other pack) across **all** projects on that machine — customer-kingfield, platform-monorepo, any Convex repo. This is exactly the requirement ("install once, apply everywhere Convex is used"); no per-project install is needed and none is used. The installer only ever writes the user layer. (Only an *explicit* disable or a `DCG_CONFIG` override can drop a pack.)
@@ -316,6 +379,7 @@ install, not just review.
 | Flag | Effect | Default |
 | --- | --- | --- |
 | `--profile <name>` | Which `profiles/<name>.toml` to render. | `full` |
+| `--project` | **Project-level install** (§2.0.3): copy the profile's packs into `<repo>/.dcg/packs/` and ensure the user config carries the auto-discovery glob `${repo_root}/.dcg/packs/*.yaml` (added once, machine-wide, safely skipped outside repos). Use for repo-specific rules, or to pin a repo to a pack version. | off (global install is default) |
 | `--live` | Opt-in dev mode: point `custom_paths` at the working clone (fast iteration; disabled if the clone moves). | off (copy is default) |
 | *(no `--bootstrap-dcg`)* | Out of scope (§2.0.1): if `dcg` is absent or unhooked, we detect and instruct — installing/updating DCG is `dcg install`'s job, never ours. | — |
 | `--dry-run` | Print the rendered config + planned actions; write nothing. | off |
@@ -565,6 +629,10 @@ T8  Isolated integration tests (temp config home): fresh install (no prior      
 T9  Real-machine E2E + explicit operational credential/identity audit (agents    (needs T8)
      hold no prod deploy key; agent identity can't deploy prod) — owned, evidenced
 T10 CI workflow → feature-branch commit → PR                                     (needs T7,T9)
+T11 `dcg scan` in CI/pre-commit over package.json + .github/workflows/**         (needs T10)
+     — closes the structural gap that the runtime hook cannot see inside
+     package scripts or spawned subprocesses (§2.0.5). Use
+     `dcg scan install-pre-commit` / `--staged` / `--fail-on`.
 ```
 
 Critical path: **T4a → T4b → T8 → T9 → T10** (T1/T2 done; T1b descoped; T5 guard live at v3.2).
@@ -619,7 +687,15 @@ IDs, and 7 more live guard bypasses. All integrated above; the guard is now **v3
   self-collision + snapshot digest/durability/orphan/GC contract, reclassified `deployment token
   create` as HARD (mints a prod credential), and fixed a **live guard false-positive** (guard → v3.2:
   `--deployment prod-staging` no longer wrongly denied). All integrated.
-- **D7 — OPEN (your call):** three rounds have each found real issues — the trajectory is converging
+- **D8 — RESOLVED (Ryan's review, post-v3.3):**
+  - Staging signal → **option B**: default deny-all-prod stays; relaxation only via DCG's scoped
+    primitives (`dcg allow --project --reason` or `[policy.rules]`), never by weakening the pack.
+    Pack parameterization ("supply a staging var") is **not possible** — packs take no variables.
+  - Project-level install → **`--project` flag**, using DCG's native `${repo_root}` auto-discovery.
+  - `deployment token create` stays **unconditionally blocked** (confirmed acceptable).
+  - Corrected: the hook does **not** block commands inside package scripts (§2.0.5); `dcg scan`
+    in CI is the complement (T11).
+- **D7 — SUPERSEDED by the §2.0 simplification + this review:** three rounds each found real issues — the trajectory is converging
   (R1 architecture → R2 broke R1's installer assumptions → R3 refined recovery internals + 1 regex
   FP), i.e. the remaining items are increasingly *implementation-detail the T8 test matrix will pin*
   rather than fresh architecture. Options: (a) **run round 4** to confirm steady-state before beads
