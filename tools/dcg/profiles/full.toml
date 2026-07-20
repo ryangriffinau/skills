@@ -1,0 +1,47 @@
+# tools/dcg profile: full
+#
+# Ryan's complete pack set — every domain pack plus all three local.* guards.
+# This is the default profile and mirrors the enabled set on his machines.
+#
+# Profile schema v1 permits EXACTLY these keys: schema_version, name,
+# [packs].enabled. Unknown keys are rejected by the installer.
+#
+# `custom_paths` is machine-derived and never lives in a profile — the
+# installer ensures DCG's conventional glob (~/.config/dcg/packs/*.yaml).
+#
+# SAFETY INVARIANT (enforced by install.sh, structurally): every profile must
+# contain `core` plus all three `local.*` guards. Profiles scope which DOMAIN
+# packs load; they are never a way to reduce safety. A profile that omits a
+# guard fails the install, not just review.
+#
+# NOTE: profiles are managed MINIMUMS, not exclusive configs. The installer
+# merges additively, so the effective enabled set on a machine may be a
+# superset (foreign pre-existing entries are always preserved).
+
+schema_version = 1
+name = "full"
+
+[packs]
+enabled = [
+  # --- core / system
+  "core",
+  "system.disk",
+  "package_managers",
+  # --- containers
+  "containers.docker",
+  # --- data
+  "database.postgresql",
+  "database.supabase",
+  "storage.s3",
+  # --- edge / dns
+  "cdn.cloudflare_workers",
+  "dns.cloudflare",
+  # --- platform / infra
+  "platform.github",
+  "payment.stripe",
+  "infrastructure.terraform",
+  # --- local guards (REQUIRED in every profile)
+  "local.agents_skills_guard",
+  "local.no_squash_merge",
+  "local.convex_prod_deploy_guard",
+]
