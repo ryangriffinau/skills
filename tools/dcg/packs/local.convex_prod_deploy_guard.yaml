@@ -1,6 +1,6 @@
 id: local.convex_prod_deploy_guard
 name: Convex Production Deploy Ban
-version: 3.2.0
+version: 3.3.0
 description: >
   Command-gated guard for agent-side Convex PRODUCTION access (Ryan, 2026-07-19,
   refined v3.1 after two gpt-5.6-sol review rounds). Root cause of the 2026-07-19
@@ -41,10 +41,28 @@ description: >
   runs are free); `--inline-query` is documented read-only but stays
   conservatively confirmed (no safe-exception mechanism that can't mask --push).
 
-  DEFERRED to implementation (verify exact CLI forms against Convex docs, then add
-  as fixtures + rules): `convex deployment select/create` prod-targeted (hard),
-  `convex deployment token create/delete` prod-targeted (confirm — mints a key),
-  `convex env default set/remove --type prod` (confirm).
+  READ POLICY (deliberate — agents MUST be able to investigate prod freely):
+  `convex data` (with --limit/--order/--component/--format jsonl — pipe to jq for
+  ID lookups), `logs`, `env get`, `env list` (incl. `--names-only`),
+  `function-spec`, `insights`, `dashboard`, `codegen` are ALL free against prod.
+  There is no `deployment list` in the CLI at all, so the deployment hard-blocks
+  below cost zero read visibility. The one gated read is `export` (see below) and
+  named `convex run` (query-vs-mutation is undecidable; use `--inline-query` with
+  a one-time `dcg allow-once` for sandboxed ad-hoc queries).
+
+  v3.3 additions, all verified against the real CLI (`convex <cmd> --help`):
+  hard-blocks on creating prod deployments, minting ANY access token, selecting
+  prod as ambient, and `import --replace-all` against prod; confirms on prod
+  `export` and token deletion. NOTE: `convex env default` does NOT exist (env has
+  only set/remove/list/get) — an earlier review invented it.
+
+  FUNDAMENTAL LIMIT (verified): a deployment's TYPE is not encoded in its
+  reference. `convex deployment create staging --type prod` is a documented
+  example, so `--deployment staging` or `--deployment joyful-capybara-123` can
+  target PRODUCTION with no textual signal. Patterns can only ever catch the
+  literal `prod` keyword; everything else is fail-open by construction. This is
+  the ceiling on any regex guard here and is precisely why the operational
+  invariant (agents hold no prod deploy credential) is the real control.
 keywords:
   - convex
   - deploy:prod
@@ -78,10 +96,13 @@ destructive_patterns:
       `convex dev`. Staging: `pnpm run deploy:staging`. Production: CI from main.
   - name: deploy-exec-script
     description: scripts/deploy-exec.sh (repo prod deploy wrapper)
-    pattern: 'deploy-exec\.sh\b'
+    pattern: '(?:^|[|;&]\s*)(?:(?:ba|z)?sh\s+)?[^\s|;&]*deploy-exec\.sh\b'
     explanation: >
       deploy-exec.sh wraps the production Convex deploy. Same code-replacement
-      risk as `convex deploy`; belongs to CI only.
+      risk as `convex deploy`; belongs to CI only. Requires an EXECUTION context
+      (the script at the start of a command segment, or invoked via sh/bash/zsh)
+      so that merely READING the file — `cat`/`sed`/`grep scripts/deploy-exec.sh`
+      — is not blocked. A bare filename mention is not an execution.
     message: >
       Blocked (hard): scripts/deploy-exec.sh performs a production Convex deploy
       and is CI-only (main -> convex-deploy). Never run agent-side.
@@ -121,6 +142,60 @@ destructive_patterns:
       Blocked (hard): `convex mcp start --dangerously-enable-production-deployments`
       unlocks production-mutating tools (incl. deploys) over MCP. Run the MCP
       server without that flag; prod changes ship via CI only.
+  - name: prod-deployment-create
+    description: creating a PRODUCTION deployment
+    pattern: 'convex\s+deployment\s+create\b[^|;&]*--type(?:=|\s+)["'']?prod\b'
+    explanation: >
+      `convex deployment create --type prod` provisions a new PRODUCTION
+      deployment. Combined with `--select` it also rewrites .env.local so every
+      subsequent convex command silently targets it. Agents must never create
+      production infrastructure.
+    message: >
+      Blocked (hard): creating a PRODUCTION deployment is never an agent-side
+      action. Ryan creates prod deployments himself. Dev/preview deployments
+      (`--type dev` / `--type preview`) are unaffected.
+  - name: deployment-token-create
+    description: minting a deploy key / access token (any deployment)
+    pattern: 'convex\s+deployment\s+token\s+create\b'
+    explanation: >
+      `convex deployment token create` mints an access token — currently deploy
+      keys. A production deploy key is exactly the credential the operational
+      invariant (§2.3) says an agent must never hold, and the target deployment
+      is often the *ambient selected* one, so prod-targeting is frequently
+      invisible in the command text. Blocked unconditionally: an agent has no
+      legitimate need to mint deploy credentials of any type. Deliberately
+      conservative — loosen only if it proves to bite.
+    message: >
+      Blocked (hard): minting Convex deploy keys/access tokens is never an
+      agent-side action (a prod key would defeat the whole safety model — see
+      the 2026-07-19/20 outage). Ryan creates tokens himself.
+  - name: prod-deployment-select
+    description: selecting PROD as the ambient deployment for later commands
+    pattern: 'convex\s+deployment\s+select\b[^|;&]*(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])'
+    explanation: >
+      `deployment select prod` makes production the AMBIENT target for every
+      later convex command. That defeats this guard directly: DCG is stateless
+      per line, so a subsequent bare `convex dev` or `convex run` carries no
+      in-line prod signal and would sail through. This is the outage vector
+      re-opened. Selecting dev/preview deployments is unaffected — and reads
+      never need select (use `--prod` per command).
+    message: >
+      Blocked (hard): `convex deployment select prod` makes PRODUCTION ambient
+      for all later commands, defeating this guard (2026-07-19/20 outage
+      vector). To read prod, use a per-command `--prod` flag instead.
+  - name: prod-import-replace-all
+    description: prod-targeted `convex import --replace-all` (full deployment data wipe)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+import\b[^|;&]*--replace-all\b|convex\s+import\b(?:[^|;&]*--replace-all\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))|[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))[^|;&]*--replace-all\b))'
+    explanation: >
+      `--replace-all` replaces ALL existing data in the deployment. Against
+      production that is an unrecoverable wipe of the entire customer dataset —
+      the same blast radius as the outage, so it is a hard block rather than a
+      confirm. Listed before the general import rule so this message wins.
+      Per-table `--replace` / `--append` remain confirm-tier.
+    message: >
+      Blocked (hard): `convex import --replace-all` against PRODUCTION wipes the
+      entire deployment's data — unrecoverable. Never agent-side. Ryan runs any
+      full prod restore himself.
   # ---------- CONFIRM: production data/config WRITES (deny + `dcg allow-once`)
   - name: prod-convex-run-write
     description: prod-targeted `convex run` (query/mutation undecidable -> confirm)
@@ -157,4 +232,28 @@ destructive_patterns:
       Confirm required: `convex env set/remove/unset` changes PRODUCTION config.
       Approve once with `dcg allow-once <code>` or have Ryan run it. Reads
       (`convex env get` / `convex env list`) need no prompt.
+  - name: prod-export
+    description: prod-targeted `convex export` (full dataset egress)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+export\b|convex\s+export\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
+    explanation: >
+      `convex export` is read-only with respect to production, but it egresses
+      the ENTIRE production dataset — and with `--include-file-storage`, stored
+      files too — into a local ZIP. That is mass customer-PII exfiltration to
+      disk, so "read-only" does not mean "harmless" here. Targeted reads
+      (`convex data`, `logs`, `function-spec`, `env list`) stay free.
+    message: >
+      Confirm required: `convex export --prod` egresses the FULL production
+      dataset (and with --include-file-storage, stored files) to local disk.
+      Approve once with `dcg allow-once <code>` or have Ryan run it. For
+      targeted reads use `convex data <table> --prod` (supports --limit/--order/
+      --format jsonl, pipe to jq).
+  - name: deployment-token-delete
+    description: deleting a deploy key / access token
+    pattern: 'convex\s+deployment\s+token\s+delete\b'
+    explanation: >
+      Revoking an access token can break CI's production deploy path. Rare and
+      cheap to approve, so confirm-tier rather than hard.
+    message: >
+      Confirm required: deleting a Convex access token can break CI's deploy
+      path. Approve once with `dcg allow-once <code>` or have Ryan run it.
 safe_patterns: []
