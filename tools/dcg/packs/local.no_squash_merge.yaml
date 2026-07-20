@@ -1,0 +1,44 @@
+id: local.no_squash_merge
+name: Squash Merge Ban
+version: 1.0.0
+description: >
+  Hard ban on squash merging (Ryan, 2026-07-07). Squash merges destroy commit
+  ancestry: per-bead atomic commits, authorship, and evidence trails collapse
+  into one commit, and git can no longer recognize shared lineage — later
+  merges of long-lived workstream branches surface phantom add/add conflicts
+  (root cause of the customer-kingfield PR #126 CONFLICTING incident).
+  Merge commits (or fast-forwards) preserve the graph; use them instead.
+keywords:
+  - git
+  - gh
+destructive_patterns:
+  - name: git-merge-squash
+    description: git merge with --squash
+    pattern: 'git\s+merge\b[^|;&]*--squash'
+    explanation: >
+      --squash collapses a branch's commit history into a single staged
+      change, discarding ancestry, per-commit context, and cross-branch
+      merge-base information.
+    message: >
+      Blocked: squash merging is banned (global policy). Use a merge commit
+      (git merge <branch>) to preserve commit ancestry and evidence trails.
+  - name: gh-pr-merge-squash
+    description: gh pr merge with --squash or -s
+    pattern: 'gh\s+pr\s+merge\b[^|;&]*(--squash|\s-s\b)'
+    explanation: >
+      Squash-merging a PR erases the branch's commit graph on the base
+      branch, causing phantom conflicts on subsequent merges from the same
+      workstream branch and destroying per-commit review evidence.
+    message: >
+      Blocked: squash merging is banned (global policy). Merge PRs with a
+      merge commit: gh pr merge <n> --merge.
+  - name: gh-api-merge-method-squash
+    description: GitHub API merge with merge_method squash
+    pattern: 'merge_method["'']?\s*[=:]\s*["'']?squash'
+    explanation: >
+      API-level squash merge — same ancestry destruction as gh pr merge
+      --squash, via the REST/GraphQL escape hatch.
+    message: >
+      Blocked: squash merging is banned (global policy), including via the
+      GitHub API. Use merge_method=merge.
+safe_patterns: []

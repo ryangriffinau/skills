@@ -1,0 +1,160 @@
+id: local.convex_prod_deploy_guard
+name: Convex Production Deploy Ban
+version: 3.2.0
+description: >
+  Command-gated guard for agent-side Convex PRODUCTION access (Ryan, 2026-07-19,
+  refined v3.1 after two gpt-5.6-sol review rounds). Root cause of the 2026-07-19
+  all-sites outage was an unintended production CODE DEPLOY (a feature branch's
+  backend replaced shared serving functions against data with no
+  publication/domain records — every customer site 404'd as Vercel's 6h ISR
+  windows expired). Convex deploys are NOT additive: they replace every function
+  implementation. The outage was caused by deploys, NOT reads/data ops — so this
+  guard gates on the COMMAND that runs, not on merely arming the prod key.
+
+  Three tiers (DCG has only allow/deny, so "confirm" = deny + `dcg allow-once`):
+    ALLOW (no prompt)  — read-only prod (`convex data`, `convex logs`,
+                         `convex env get`/`env list`, `convex codegen`), any
+                         non-prod-targeted convex command, arming the prod key.
+    CONFIRM (per-cmd)  — prod data/config WRITES: prod-targeted `convex run`,
+                         `convex import`, `convex env set`/`remove`/`unset`.
+    BLOCK (hard/never) — prod CODE deploys + prod-enabling ops: `convex deploy`,
+                         `deploy:prod` scripts, `scripts/deploy-exec.sh`,
+                         prod-targeted `convex dev`, prod-targeted
+                         `convex run --push`, and
+                         `convex mcp start --dangerously-enable-production-deployments`.
+                         CI (main -> convex-deploy) only; never agent-side.
+
+  Prod is detected from IN-LINE signals only: `--prod`; `--deployment [team:]
+  [project:]prod` (qualified names ending in prod); or an inline
+  `CONVEX_PRODUCTION_DEPLOY_KEY`, `CONVEX_DEPLOY_KEY=prod:`, or
+  `CONVEX_DEPLOYMENT=prod:` assignment.
+
+  IMPORTANT — DEFENSE IN DEPTH, not the authorization boundary. DCG is stateless
+  per command line and uses Rust regex (no lookaround), so it is fail-open to: a
+  prod key/selector set on a PRIOR line or via `--env-file`/`.env.local`; a
+  deployment name that does not literally contain "prod"; and shell indirection
+  (`TOOL=convex; $TOOL deploy`, aliases, `eval`, generated strings). The REAL
+  invariant is operational: agent sessions must not hold production deploy
+  credentials, and the agent identity must not have prod code-deploy permission.
+  Production deploy credentials remain CI-only. `convex run` query-vs-mutation is
+  also undecidable from the string, so all prod-targeted runs confirm (bare/dev
+  runs are free); `--inline-query` is documented read-only but stays
+  conservatively confirmed (no safe-exception mechanism that can't mask --push).
+
+  DEFERRED to implementation (verify exact CLI forms against Convex docs, then add
+  as fixtures + rules): `convex deployment select/create` prod-targeted (hard),
+  `convex deployment token create/delete` prod-targeted (confirm — mints a key),
+  `convex env default set/remove --type prod` (confirm).
+keywords:
+  - convex
+  - deploy:prod
+  - deploy-exec
+  - CONVEX_PRODUCTION_DEPLOY_KEY
+destructive_patterns:
+  # ---------- HARD BLOCK: production code deployment / prod-enabling ops
+  - name: pnpm-deploy-prod-script
+    description: pnpm/npm/yarn/bun run deploy:prod or deploy:prod:ci
+    pattern: 'deploy:prod\b'
+    explanation: >
+      The deploy:prod / deploy:prod:ci package scripts run `convex deploy`
+      against production, replacing every deployed function — including the
+      shared serving functions live customer sites depend on. The exact
+      2026-07-19 outage vector.
+    message: >
+      Blocked (hard): agent-side Convex PRODUCTION deploys are banned
+      (2026-07-19 outage). Prod deploys ship via CI from main only. Dev:
+      `convex dev`. Staging: `pnpm run deploy:staging`. Never agent-side.
+  - name: raw-convex-deploy
+    description: any raw `convex deploy` invocation
+    pattern: 'convex\s+deploy\b'
+    explanation: >
+      `convex deploy` is a production code push by default and its target
+      depends on the ambient deploy key, invisible in the command text. It
+      replaces shared serving functions — the outage vector. Banned agent-side
+      regardless of intended environment.
+    message: >
+      Blocked (hard): raw `convex deploy` is banned agent-side — it is a prod
+      code push and can silently hit production (2026-07-19 outage). Dev:
+      `convex dev`. Staging: `pnpm run deploy:staging`. Production: CI from main.
+  - name: deploy-exec-script
+    description: scripts/deploy-exec.sh (repo prod deploy wrapper)
+    pattern: 'deploy-exec\.sh\b'
+    explanation: >
+      deploy-exec.sh wraps the production Convex deploy. Same code-replacement
+      risk as `convex deploy`; belongs to CI only.
+    message: >
+      Blocked (hard): scripts/deploy-exec.sh performs a production Convex deploy
+      and is CI-only (main -> convex-deploy). Never run agent-side.
+  - name: prod-targeted-convex-dev
+    description: convex dev aimed at production (inline prod key/selector, --prod, or --deployment prod)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+dev\b|convex\s+dev\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
+    explanation: >
+      `convex dev` continuously PUSHES local code to the deployment its key/
+      selector chooses. Armed with the production key, CONVEX_DEPLOYMENT=prod:,
+      --prod, or --deployment ...:prod it streams code straight into production.
+      Bare `convex dev` (dev deployment) stays allowed. NOTE: a prod
+      key/selector set on a prior line is invisible here (fail-open).
+    message: >
+      Blocked (hard): `convex dev` against PRODUCTION pushes local code live
+      (2026-07-19 outage vector). Run `convex dev` against a dev deployment
+      without the production key/selector. Prod code ships via CI only.
+  - name: prod-convex-run-push
+    description: prod-targeted `convex run --push` (pushes local code before running)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+run\b[^|;&]*--push\b|convex\s+run\b(?:[^|;&]*--push\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))|[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))[^|;&]*--push\b))'
+    explanation: >
+      `convex run --push` pushes local functions to the target deployment before
+      executing. Production-targeted, this is a production CODE deploy, not a
+      data op — a hard block, not a confirm. Listed before the general
+      run-confirm rule so the code-push message wins.
+    message: >
+      Blocked (hard): prod-targeted `convex run --push` pushes local code to
+      PRODUCTION (2026-07-19 outage vector). Production code ships via CI only.
+      To run a prod function without pushing, drop `--push`.
+  - name: prod-convex-mcp-dangerous
+    description: convex mcp start with --dangerously-enable-production-deployments
+    pattern: 'convex\s+mcp\b[^|;&]*--dangerously-enable-production-deployments\b'
+    explanation: >
+      The Convex MCP server's --dangerously-enable-production-deployments flag
+      explicitly unlocks mutating/production tools over MCP, including prod
+      deploys. Never enable it agent-side.
+    message: >
+      Blocked (hard): `convex mcp start --dangerously-enable-production-deployments`
+      unlocks production-mutating tools (incl. deploys) over MCP. Run the MCP
+      server without that flag; prod changes ship via CI only.
+  # ---------- CONFIRM: production data/config WRITES (deny + `dcg allow-once`)
+  - name: prod-convex-run-write
+    description: prod-targeted `convex run` (query/mutation undecidable -> confirm)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+run\b|convex\s+run\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
+    explanation: >
+      A prod-targeted `convex run` may invoke a mutation/action that writes
+      production data. The CLI string does not reveal query vs mutation, so all
+      prod-targeted runs require one-time confirmation. Bare `convex run` (dev)
+      is unaffected. `--inline-query` is read-only but stays conservatively
+      gated (no safe exception that can't mask the --push hard block).
+    message: >
+      Confirm required: prod-targeted `convex run` may WRITE production data
+      (query vs mutation is indistinguishable). Read-only? Approve once with
+      `dcg allow-once <code>` or have Ryan run it. Read-only prod introspection
+      via `convex data` / `convex logs` / `convex env get` needs no prompt.
+  - name: prod-convex-import
+    description: prod-targeted `convex import` (bulk data write)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+import\b|convex\s+import\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
+    explanation: >
+      `convex import` bulk-writes documents into the target deployment. Against
+      production it mutates live data; require explicit per-command approval.
+    message: >
+      Confirm required: `convex import` WRITES bulk data to PRODUCTION. Approve
+      once with `dcg allow-once <code>` or have Ryan run it.
+  - name: prod-convex-env-write
+    description: prod-targeted `convex env set` / `env remove` / `env unset` (config write)
+    pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+env\s+(?:set|remove|rm|unset)\b|convex\s+env\s+(?:(?:set|remove|rm|unset)\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))|(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&]))[^|;&]*(?:set|remove|rm|unset)\b))'
+    explanation: >
+      Setting or removing production environment variables changes live backend
+      config and can break serving functions. Reads (`env get`/`env list`) are
+      allowed; writes require per-command approval. Matches the write subcommand
+      and the prod selector in either order.
+    message: >
+      Confirm required: `convex env set/remove/unset` changes PRODUCTION config.
+      Approve once with `dcg allow-once <code>` or have Ryan run it. Reads
+      (`convex env get` / `convex env list`) need no prompt.
+safe_patterns: []
