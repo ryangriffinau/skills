@@ -31,6 +31,8 @@ hard-won, incident-driven safety policy for this stack:
   add/add conflicts on long-lived workstream branches (customer-kingfield PR #126 incident).
 - **`local.agents_skills_guard`** — a hand-made symlink into `~/.agents/skills` bypasses the
   `skills` CLI's source tracking and silently forks the canonical repo.
+- **`local.no_bypass_prepush`** — agent-side `--no-verify`, `-n`, and
+  `SKIP_PREPUSH_VERIFY` bypasses silently skip the tracked repository verification hooks.
 
 Today these live **only** in `~/.config/dcg/` on one machine. They are:
 - **not portable** — a new laptop or a teammate starts with zero of these guards;
@@ -87,7 +89,7 @@ model shrinks to one small file edit.
 (`git checkout <sha> && ./install.sh`). Retained: copy-not-symlink (no clone dependency),
 `dcg pack validate` pre-install, verify-before-activate, atomic config write, one timestamped backup.
 Cost: no instant multi-version on-disk rollback (git + backup covers it). Teammate-owned packs in that
-dir coexist — we own only our three filenames, which is additive by nature.
+dir coexist — we own only our four filenames, which is additive by nature.
 
 > Supersedes the snapshot design in §5 step 3 and the `--live`/sourcing discussion. Those sections
 > stay for provenance but the snapshot machinery is **descoped**; T4b shrinks accordingly.
@@ -115,8 +117,8 @@ A fresh machine's prerequisite is simply "DCG installed and hooked per its own i
 
 **Verified empirically, not assumed.** Running `dcg config` from `~/Documents/InStrand` (a git repo
 carrying its own `.dcg.toml` that enables 12 built-in packs and lists none of our guards) reports
-**both** config sources and an effective enabled set of **15 packs** — the project's 12 **plus all
-three `local.*` guards inherited from the user config**.
+**both** config sources and an effective enabled set of **16 packs** — the project's 12 **plus all
+four `local.*` guards inherited from the user config**.
 
 So: **`[packs] enabled` is merged (union) across user → project layers, not replaced.** A project
 `.dcg.toml` can *add* packs but cannot silently drop a global guard by omission. This strengthens the
@@ -270,6 +272,7 @@ enabled = [
   "platform.github", "payment.stripe",
   "infrastructure.terraform", "storage.s3", "package_managers",
   "local.agents_skills_guard", "local.no_squash_merge", "local.convex_prod_deploy_guard",
+  "local.no_bypass_prepush",
 ]
 ```
 
@@ -291,6 +294,7 @@ tools/dcg/
     local.agents_skills_guard.yaml       # migrated verbatim
     local.no_squash_merge.yaml           # migrated verbatim
     local.convex_prod_deploy_guard.yaml  # migrated verbatim
+    local.no_bypass_prepush.yaml         # migrated verbatim
   test/
     verify.sh                            # block/allow assertions via `dcg explain --robot`
   PLAN.md                                # this document (design record)
@@ -326,6 +330,7 @@ enabled = [
   "platform.github", "payment.stripe",
   "infrastructure.terraform", "storage.s3", "package_managers",
   "local.agents_skills_guard", "local.no_squash_merge", "local.convex_prod_deploy_guard",
+  "local.no_bypass_prepush",
 ]
 ```
 
@@ -338,6 +343,7 @@ name = "backpocket"
 enabled = [
   "core", "system.disk", "package_managers", "platform.github", "payment.stripe",
   "local.agents_skills_guard", "local.no_squash_merge", "local.convex_prod_deploy_guard",
+  "local.no_bypass_prepush",
 ]
 ```
 
@@ -347,22 +353,23 @@ The installer renders the profile into a full config, injecting `custom_paths` a
 
 | Profile | Contents | For |
 | --- | --- | --- |
-| **`full`** (default) | Exactly the 15 packs above — Ryan's current machine's enabled set. | Ryan's machines; anyone who wants the whole floor. |
-| **`backpocket`** | `core, system.disk, package_managers, platform.github, payment.stripe` + **all three `local.*` guards**. Drops infra packs (terraform/s3/cloudflare/postgres/supabase/docker) a monorepo-only teammate doesn't touch. | A teammate working the platform-monorepo who doesn't own infra. |
+| **`full`** (default) | Exactly the 16 packs above — Ryan's current machine's enabled set. | Ryan's machines; anyone who wants the whole floor. |
+| **`backpocket`** | `core, system.disk, package_managers, platform.github, payment.stripe` + **all four `local.*` guards**. Drops infra packs (terraform/s3/cloudflare/postgres/supabase/docker) a monorepo-only teammate doesn't touch. | A teammate working the platform-monorepo who doesn't own infra. |
 
 **Profiles are managed *minimums*, not exclusive effective configs** (round 2): because the installer
 merges additively, selecting `backpocket` after `full` *stops managing* the dropped infra packs but
 **preserves any foreign pre-existing enabled entries** — so the effective config may remain a superset
 of the profile. The profile defines what this installer *owns*, not the machine's whole policy.
 
-**Safety invariant (non-negotiable):** *every* profile includes **all three `local.*` guards** and
+**Safety invariant (non-negotiable):** *every* profile includes **all four `local.*` guards** and
 `core`. Profiles vary only *domain* infra packs (you don't load the Postgres pack if you never run
 `psql`). A profile is **domain-scoping, never safety-reduction** — there is no "lax" tier. This is
 deliberate: it keeps the robust floor everywhere and prevents profiles from becoming a backdoor for
 weaker safety. The installer enforces this by **structurally parsing** the rendered candidate's
 effective `[packs].enabled` set (a TOML parse, not grep — a comment or stray string must not satisfy
 it) and asserting exactly one instance each of `core`, `local.agents_skills_guard`,
-`local.no_squash_merge`, `local.convex_prod_deploy_guard`. A profile that omits a guard fails the
+`local.no_squash_merge`, `local.convex_prod_deploy_guard`, `local.no_bypass_prepush`.
+A profile that omits a guard fails the
 install, not just review.
 
 > **Decision to confirm (D1):** the two-profile set above. If teammates need finer domain slices we
@@ -432,7 +439,8 @@ authoring rules. Warns that moving the clone disables the packs; never for share
    Fail loudly on an unknown version.
 2. **Resolve profile structurally.** Parse `profiles/<name>.toml` (a TOML parse, not grep). Assert
    the **safety invariant on the parsed effective enabled set** — exactly one instance each of
-   `core`, `local.agents_skills_guard`, `local.no_squash_merge`, `local.convex_prod_deploy_guard`.
+   `core`, `local.agents_skills_guard`, `local.no_squash_merge`, `local.convex_prod_deploy_guard`,
+   `local.no_bypass_prepush`.
    A comment or a string outside `[packs].enabled` must not satisfy the check.
 3. **Validate the repo packs.** Run `dcg pack validate` on each `packs/*.yaml`; reject symlinks and
    non-regular files. That's it — **no snapshot, no digest, no staging dir** (§2.0 descoped all of it).
@@ -597,14 +605,14 @@ Dependency-ordered. IDs are placeholders until `br create` in `~/Code/github/rya
 
 ```
 T1  Absolute-path custom_paths glob loads  [DONE — confirmed in review]
-T2  Scaffold tools/dcg/ + stage 3 packs  [DONE — convex guard at v3 three-      (blocks T3,T5)
+T2  Scaffold tools/dcg/ + stage 4 packs  [DONE — convex guard at v3 three-      (blocks T3,T5)
      tier, review-hardened; other two migrated verbatim]
 T1b [DESCOPED by §2.0 — stable conventional glob means no duplicate-ID or
      path-ordering question to ground]
      [T2b/T4d REMOVED — out of scope per §2.0.1: hook wiring belongs to
      `dcg install`, and InStrand needs no change (pack config is additive)]
 T3  Author versioned profile schema (schema_version,name,[packs].enabled;         (needs T2)
-     reject unknown keys) + full.toml (15) + backpocket.toml (§4)
+     reject unknown keys) + full.toml (16) + backpocket.toml (§4)
 T4a Select/vendor structural TOML parse+serialize helper; strict profile +        (needs T3)
      manifest parsers + canonical config comparison
 T4b Implement mkdir lock, copy packs into the STABLE conventional dir             (needs T4a)

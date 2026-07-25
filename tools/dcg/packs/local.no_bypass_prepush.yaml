@@ -1,0 +1,47 @@
+id: local.no_bypass_prepush
+name: No Silent Bypass of Verify Hooks
+version: 1.0.0
+description: >
+  Blocks agent-side bypass of the repo's git verify hooks (Ryan, 2026-07-24).
+  The tracked pre-push hook runs the CI-equivalent gate (lint + typecheck +
+  test) so no red code is pushed while GitHub Actions is billing-blocked, and
+  the pre-commit hook runs Biome + UBS. `--no-verify` / `-n` / the
+  `SKIP_PREPUSH_VERIFY` escape hatch silently skip that gate. Blocking here makes
+  a bypass require explicit human confirmation: Ryan runs `dcg allow-once
+  local.no_bypass_prepush:<rule>` for a single legitimate skip (e.g. sharing a
+  known-WIP branch, or when `verify` itself is broken). Agents must never bypass.
+keywords:
+  - git
+destructive_patterns:
+  - name: git-push-no-verify
+    description: git push with --no-verify (skips the pre-push CI-equivalent gate)
+    pattern: 'git\s+push\b[^|;&]*--no-verify'
+    explanation: >
+      --no-verify skips the pre-push hook, which runs lint + typecheck + test.
+      While CI is billing-blocked this hook is the only gate stopping red code
+      from being pushed.
+    message: >
+      Blocked: bypassing the pre-push verify gate is not allowed for agents.
+      Fix what `bun run verify` reports. If a skip is genuinely required, ask
+      Ryan to run: dcg allow-once local.no_bypass_prepush:git-push-no-verify
+  - name: skip-prepush-verify-env
+    description: SKIP_PREPUSH_VERIFY escape-hatch env var on a push
+    pattern: 'SKIP_PREPUSH_VERIFY\s*='
+    explanation: >
+      SKIP_PREPUSH_VERIFY=1 is the pre-push hook's built-in escape hatch; it
+      skips the lint/typecheck/test gate entirely.
+    message: >
+      Blocked: the SKIP_PREPUSH_VERIFY escape hatch is for explicit human use
+      only. Ask Ryan to run it, or dcg allow-once
+      local.no_bypass_prepush:skip-prepush-verify-env for one push.
+  - name: git-commit-no-verify
+    description: git commit with --no-verify or -n (skips pre-commit Biome/UBS)
+    pattern: 'git\s+commit\b[^|;&]*(--no-verify|\s-n\b)'
+    explanation: >
+      --no-verify / -n skips the pre-commit hook (Biome auto-format + UBS bug
+      scan), letting unformatted or flagged code into a commit.
+    message: >
+      Blocked: bypassing the pre-commit gate is not allowed for agents. If a
+      skip is genuinely required, ask Ryan to run: dcg allow-once
+      local.no_bypass_prepush:git-commit-no-verify
+safe_patterns: []
