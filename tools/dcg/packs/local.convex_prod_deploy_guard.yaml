@@ -1,6 +1,6 @@
 id: local.convex_prod_deploy_guard
 name: Convex Production Deploy Ban
-version: 3.3.0
+version: 3.4.0
 description: >
   Command-gated guard for agent-side Convex PRODUCTION access (Ryan, 2026-07-19,
   refined v3.1 after two gpt-5.6-sol review rounds). Root cause of the 2026-07-19
@@ -72,12 +72,14 @@ destructive_patterns:
   # ---------- HARD BLOCK: production code deployment / prod-enabling ops
   - name: pnpm-deploy-prod-script
     description: pnpm/npm/yarn/bun run deploy:prod or deploy:prod:ci
-    pattern: 'deploy:prod\b'
+    pattern: '(?:pnpm|npm|yarn|bun|turbo|nx|make)\s[^|;&]*deploy:prod\b'
     explanation: >
-      The deploy:prod / deploy:prod:ci package scripts run `convex deploy`
-      against production, replacing every deployed function — including the
-      shared serving functions live customer sites depend on. The exact
-      2026-07-19 outage vector.
+      The prod-deploy package scripts run `convex deploy` against production,
+      replacing every deployed function — including the shared serving functions
+      live customer sites depend on. The exact 2026-07-19 outage vector.
+      Requires a package-manager/task-runner invocation in the same segment, so
+      that WRITING ABOUT the script name (docs, commit messages, bead notes) is
+      not blocked — only running it is. A bare mention is not an execution.
     message: >
       Blocked (hard): agent-side Convex PRODUCTION deploys are banned
       (2026-07-19 outage). Prod deploys ship via CI from main only. Dev:

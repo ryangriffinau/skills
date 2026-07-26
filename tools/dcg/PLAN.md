@@ -2,6 +2,9 @@
 
 **Status:** proposed · **Author:** Ryan (via planning-workflow) · **Date:** 2026-07-19
 **Home:** `ryangriffinau/skills/tools/dcg/` — a *tools* root beside `skills/`, **not** a skill.
+**⚠️ READ §2.0.6 FIRST.** It supersedes the installer design in §5: stow now delivers config to
+Ryan's machines, `sync-to-stow.sh` is the built mechanism, and the transactional installer
+(lock/manifest/journal/recovery) is descoped. Later sections are kept for provenance.
 **Distribution model:** all-central (every rule installs at the DCG **user** level via `install.sh`;
 nothing repo-scoped) — per Ryan's decision. The installer merges **additively** (preserves foreign
 config; §5), so "central" does not mean "overwrite a teammate's setup." The real production-deploy
@@ -131,6 +134,53 @@ can point at an entirely different config file. Omission cannot.
 
 Clean sweep otherwise: allowlist empty; heredoc settings are defaults; no `[agents.*]` overrides; the
 only project `.dcg.toml` anywhere under `~/Code/github` or `~/Documents` is InStrand's.
+
+### 2.0.6 SUPERSEDING ARCHITECTURE (2026-07-24) — stow delivers, this repo is the source
+
+Ryan adopted **dotfiles + GNU stow** for machine config after the earlier sections were written.
+`~/.config/dcg/config.toml` and the pack files are now **symlinks** into
+`~/.dotfiles/stow/agents/.config/dcg/`. That changes the design twice over:
+
+**1. The planned installer would have broken stow.** §5 step 8 wrote the config via temp-file +
+`rename(2)`. Renaming over `~/.config/dcg/config.toml` **replaces the symlink with a real file**,
+silently detaching it from the dotfiles repo. Had T4b shipped as specced, that is the first thing it
+would have done. Do not write that path.
+
+**2. Stow already solves the portability problem this project was created for.** New machine: clone
+dotfiles, `stow agents`, done. So the *installer* earns nothing for Ryan's machines. What this repo
+still uniquely provides: **canonical reviewed pack content**, **profiles** (a teammate's scoped
+subset, which a dotfiles repo cannot express), **`verify.sh`** (the acceptance gate), and the
+pack-authoring/fixture harness.
+
+**The pipeline is therefore:**
+
+```
+tools/dcg/packs/*.yaml            source of truth — versioned, reviewed, validated
+     |   ./sync-to-stow.sh        validate + copy + verify + report drift  (BUILT)
+     v
+~/.dotfiles/stow/agents/.config/dcg/packs/*.yaml
+     |   stow agents              symlinks; travels to every machine
+     v
+~/.config/dcg/packs/*.yaml   ->   DCG loads via the stable custom_paths glob
+```
+
+**`sync-to-stow.sh` replaces `install.sh` for Ryan's machines.** It: parses the profile structurally
+and asserts the safety invariant (all five `local.*` guards + `core`); runs `dcg pack validate` on
+every pack; refuses to sync a symlink; copies changed packs into the stow dir via temp+rename in the
+destination dir; then **verifies without writing** — reports whether the live enabled list covers the
+profile, and flags any real pack file in `~/.config/dcg/packs/` that stow doesn't manage (those won't
+travel to a new machine). `--dry-run` writes nothing; `--check` exits non-zero on any drift, for
+CI/pre-commit. It **never deletes** (RULE 1) and never writes `config.toml`.
+
+**`config.toml`'s enabled list stays hand-maintained in the dotfiles repo — by design.** It is a stow
+symlink, so any atomic write would break it. The script verifies and reports instead of rewriting.
+That is the one deliberate manual step, and it is a two-line edit when adding a pack.
+
+**Consequences for §5 and the task graph:** the transactional installer (lock, ownership manifest,
+journal, recovery state machine, no-op oracle, legacy-collision preflight) is **descoped entirely** —
+stow plus a validating copy makes all of it unnecessary. §5 and §2.0/§2.0.3 remain for provenance and
+for a future minimal teammate-facing `install.sh` (for people who don't clone Ryan's dotfiles), which
+is the only thing that would still need TOML merging.
 
 ### 2.0.3 DCG primitives we should be using (discovered in review; changes the install design)
 
