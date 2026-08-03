@@ -1,8 +1,35 @@
 # Worked examples
 
 Real before-and-after pairs from a fortnightly update to a galvanising customer,
-July 2026. The final artifact at the bottom is the **accepted minimum bar**: new
-work should clear it, not match it.
+July 2026. The final copy block at the bottom is the **accepted minimum bar** for
+customer-mode prose: new work should clear it, not match it.
+
+## Actions upfront
+
+When action is pending, it leads. This rich-channel example shows the complete
+per-ask pattern:
+
+> 1. **AI Gateway credit.** *Add $100 credit.* Production now uses the gateway
+> because the previous provider lacks required models and features. Add credit
+> in the [project billing settings](https://example.invalid/project/billing).
+> Hard caps are already enabled and usage will be monitored weekly. A project
+> admin must add the card; ask for a re-invite if access has expired.
+
+The name is scannable, the italic sentence says exactly what to do, the reason is
+plain, the link lands at the action, cost exposure is bounded, and likely access
+friction is anticipated. In SMS or email-paste, render the same content without
+Markdown:
+
+> 1. AI Gateway credit
+> Action: Add $100 credit.
+> Reason: Production now uses the gateway because the previous provider lacks
+> required models and features.
+> Link: https://example.invalid/project/billing
+> Cost: Hard caps are enabled; usage is reviewed weekly.
+> Access: A project admin must add the card. Ask for a re-invite if needed.
+
+The example link is illustrative. A real draft must use a grounded deep link or
+`[PLACEHOLDER: direct billing link]`.
 
 ## Titles
 
@@ -80,7 +107,7 @@ Beyond the general patterns in `/de-slopify`:
 - **Internal terminology leaking.** "release provenance" means nothing outside
   the team and was dropped rather than explained.
 
-## The accepted artifact
+## The accepted customer copy block
 
 Minimum bar. Five items, noun-phrase titles, every technical item carrying its
 consequence, no internal metrics, no rollout claim.
