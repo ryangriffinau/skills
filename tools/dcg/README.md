@@ -61,6 +61,32 @@ Useful delivery options:
 | `--dry-run` | Report copies and drift without writing. |
 | `--check` | Verify only and exit non-zero when stow or live configuration has drifted. |
 
+## Install without stow
+
+Teammates who do not clone Ryan's dotfiles can install the managed minimum directly:
+
+```bash
+./install.sh --profile backpocket
+```
+
+`install.sh` validates the profile, every selected custom pack, and the complete behavior fixture
+before writing. It copies selected `local.*` packs into `~/.config/dcg/packs/`, preserves foreign
+TOML content, unions the profile into `[packs].enabled`, and ensures the conventional custom-pack
+glob is present. A changed config gets a timestamped backup; a second unchanged run is a no-op.
+
+The installer refuses to write when `~/.config/dcg/config.toml` is a symlink. That is a stow-managed
+machine, where replacing the symlink would detach live policy from dotfiles; use
+`./sync-to-stow.sh` instead. Preview a non-stow installation with:
+
+```bash
+./install.sh --profile backpocket --dry-run
+```
+
+For a gradual team rollout, DCG's native `[policy] default_mode = "warn"` and `observe_until`
+settings can soften newly introduced rules until an agreed date. This installer deliberately does
+not own those policy keys; add them through the teammate's reviewed DCG configuration rather than
+silently changing enforcement during pack installation.
+
 Run the independent behavior gate after delivery or while authoring:
 
 ```bash
