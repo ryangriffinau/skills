@@ -4,12 +4,10 @@
 set -euo pipefail
 
 PROFILE="full"
-CONFIG_FILE="$HOME/.config/dcg/config.toml"
+DEFAULT_CONFIG_FILE="$HOME/.config/dcg/config.toml"
+CONFIG_FILE="$DEFAULT_CONFIG_FILE"
 DRY_RUN=0
 DCG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# DCG expands this conventional config glob; it must remain a literal tilde.
-# shellcheck disable=SC2088
-CUSTOM_PATH='~/.config/dcg/packs/*.yaml'
 REQUIRED_GUARDS=(
   core
   local.agents_skills_guard
@@ -46,7 +44,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROFILE_FILE="$DCG_DIR/profiles/$PROFILE.toml"
+case "$CONFIG_FILE" in
+  /*) ;;
+  *) CONFIG_FILE="$PWD/$CONFIG_FILE" ;;
+esac
 PACK_DIR="$(dirname "$CONFIG_FILE")/packs"
+if [[ "$CONFIG_FILE" == "$DEFAULT_CONFIG_FILE" ]]; then
+  # DCG expands this conventional user-config glob; keep the literal tilde.
+  # shellcheck disable=SC2088
+  CUSTOM_PATH='~/.config/dcg/packs/*.yaml'
+else
+  CUSTOM_PATH="$PACK_DIR/*.yaml"
+fi
 [[ -f "$PROFILE_FILE" ]] || die "unknown profile: $PROFILE"
 [[ ! -L "$CONFIG_FILE" ]] || die "$CONFIG_FILE is a symlink (likely stow-managed); refusing to detach it. Use $DCG_DIR/sync-to-stow.sh instead."
 command -v dcg >/dev/null 2>&1 || die "dcg is not installed; install and hook DCG using its own installer first"
