@@ -17,6 +17,52 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install pinned DCG binary
+        shell: bash
+        env:
+          DCG_VERSION: v0.6.5
+          DCG_ARCHIVE: dcg-x86_64-unknown-linux-musl.tar.xz
+        run: |
+          set -euo pipefail
+          release_url="https://github.com/Dicklesworthstone/destructive_command_guard/releases/download/${DCG_VERSION}"
+          install_root="$RUNNER_TEMP/dcg"
+          mkdir -p "$install_root/bin"
+          curl --fail --location --silent --show-error \
+            --output "$install_root/$DCG_ARCHIVE" \
+            "$release_url/$DCG_ARCHIVE"
+          curl --fail --location --silent --show-error \
+            --output "$install_root/$DCG_ARCHIVE.sha256" \
+            "$release_url/$DCG_ARCHIVE.sha256"
+          (
+            cd "$install_root"
+            sha256sum --check "$DCG_ARCHIVE.sha256"
+          )
+          tar -xJf "$install_root/$DCG_ARCHIVE" -C "$install_root/bin"
+          echo "$install_root/bin" >> "$GITHUB_PATH"
+
+      - name: Scan executable repository configuration with DCG
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/dcg-scan.toml"
+          {
+            printf '[packs]\n'
+            printf 'custom_paths = ["%s/tools/dcg/packs/*.yaml"]\n' "$GITHUB_WORKSPACE"
+            printf 'enabled = [\n  "core",\n'
+            for pack in tools/dcg/packs/*.yaml; do
+              printf '  "%s",\n' "$(basename "$pack" .yaml)"
+            done
+            printf ']\n'
+          } > "$config"
+
+          scan_paths=(.github/workflows)
+          if [[ -f package.json ]]; then
+            scan_paths+=(package.json)
+          fi
+          DCG_CONFIG="$config" dcg scan "${scan_paths[@]}" \
+            --fail-on error \
+            --no-color
+
       - name: Lint skill metadata
         run: scripts/lint-skills
 
