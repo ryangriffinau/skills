@@ -91,11 +91,13 @@ Run the independent behavior gate after delivery or while authoring:
 
 ```bash
 ./test/verify.sh
+./test/install.test.sh
 ```
 
 `verify.sh` loads packs from this checkout unless `DCG_CONFIG` already names a candidate config. It
 passes each fixture command to `dcg explain` as one inert argument; it never evaluates or executes
-the fixture text.
+the fixture text. `install.test.sh` uses a temporary HOME and never reads or writes the operator's
+live DCG configuration.
 
 ## Profiles
 
