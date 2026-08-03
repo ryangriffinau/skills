@@ -4,7 +4,7 @@ status: refining
 version: 0.9.0
 tags: [communication, reporting, stakeholder]
 updated: 2026-07-30
-description: Write a progress update for a reader outside the codebase: customer, client, or exec sponsor. Grounds every claim in source evidence, cuts internal delivery churn, and states outcomes in the reader's own business vocabulary. Use when the user asks for a customer update, client update, progress summary, stakeholder report, or what shipped this period.
+description: "Write a progress update for a reader outside the codebase: customer, client, or exec sponsor. Grounds every claim in source evidence, cuts internal delivery churn, and states outcomes in the reader's own business vocabulary. Use when the user asks for a customer update, client update, progress summary, stakeholder report, or what shipped this period."
 ---
 
 # Customer Update
