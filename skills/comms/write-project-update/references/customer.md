@@ -6,7 +6,6 @@ operation, not the repository.
 ## Keep
 
 - Address a named person when the channel and context support it.
-- Lead with the shared asks block whenever action is pending.
 - Order updates by what the reader sees in their work.
 - Translate implementation into what they stop doing by hand, stop missing or
   can now trust.
