@@ -1,0 +1,5 @@
+{"observed":"allow","command":"TOOL=convex; $TOOL deploy","reason":"shell indirection is unresolved by the pre-exec regex evaluator"}
+{"observed":"allow","command":"convex dev","precondition":"a production key or selector was exported on a prior command line"}
+{"observed":"allow","command":"convex dev --env-file .env.production","reason":"the regex evaluator cannot inspect env-file contents"}
+{"observed":"allow","command":"convex dev --deployment happy-animal-123","reason":"a deployment reference does not encode whether its deployment type is production"}
+{"observed":"allow","command":"CONVEX_DEPLOYMENT=$TARGET convex dev","reason":"an inline selector whose value uses shell indirection cannot be resolved statically"}

@@ -1,6 +1,6 @@
 id: local.agents_skills_guard
 name: Agents Skills Symlink Guard
-version: 1.0.0
+version: 1.1.0
 description: >
   Requires explicit approval before a symlink is CREATED inside ~/.agents/skills.
   That directory is the canonical install root for the `skills` CLI: it writes
@@ -13,7 +13,7 @@ keywords:
 destructive_patterns:
   - name: symlink-into-agents-skills
     description: Hand-made symlink whose link path lands inside ~/.agents/skills
-    pattern: '^ln\s+-[a-zA-Z]*s[a-zA-Z]*\s+\S+\s+\S*\.agents/skills(?:/\S*)?\s*$'
+    pattern: '^(?:\S*/)?ln\s+(?:(?:-[a-zA-Z]*s[a-zA-Z]*)|--symbolic)\s+\S+\s+\S*\.agents/skills(?:/\S*)?\s*$'
     explanation: >
       ~/.agents/skills is managed by the `skills` CLI, which installs real
       directories there and symlinks agent dirs (.claude, .codex) back to it.

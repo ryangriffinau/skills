@@ -1,6 +1,6 @@
 id: local.no_squash_merge
 name: Squash Merge Ban
-version: 1.0.0
+version: 1.1.0
 description: >
   Hard ban on squash merging (Ryan, 2026-07-07). Squash merges destroy commit
   ancestry: per-bead atomic commits, authorship, and evidence trails collapse
@@ -14,7 +14,7 @@ keywords:
 destructive_patterns:
   - name: git-merge-squash
     description: git merge with --squash
-    pattern: 'git\s+merge\b[^|;&]*--squash'
+    pattern: 'git\s+(?:(?:-C|--git-dir|--work-tree)(?:=|\s+)\S+\s+)*merge\b[^|;&]*--squash'
     explanation: >
       --squash collapses a branch's commit history into a single staged
       change, discarding ancestry, per-commit context, and cross-branch
@@ -24,7 +24,7 @@ destructive_patterns:
       (git merge <branch>) to preserve commit ancestry and evidence trails.
   - name: gh-pr-merge-squash
     description: gh pr merge with --squash or -s
-    pattern: 'gh\s+pr\s+merge\b[^|;&]*(--squash|\s-s\b)'
+    pattern: 'gh\s+(?:(?:--repo|-R)(?:=|\s+)\S+\s+)*pr\s+merge\b[^|;&]*(--squash|\s-s\b)'
     explanation: >
       Squash-merging a PR erases the branch's commit graph on the base
       branch, causing phantom conflicts on subsequent merges from the same
