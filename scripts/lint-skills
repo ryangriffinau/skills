@@ -173,7 +173,9 @@ lint_frontmatter() {
 
 frontmatter_value_at_ref() {
   local ref="$1" path="$2" key="$3"
-  git -C "$ROOT" show "$ref:$path" 2>/dev/null |
+  local contents
+  contents="$(git -C "$ROOT" show "$ref:$path" 2>/dev/null)" || return 0
+  printf '%s\n' "$contents" |
     sed -n "s/^${key}:[[:space:]]*//p" |
     head -1 |
     sed 's/^"//; s/"$//'
@@ -204,6 +206,11 @@ check_version_bumps() {
     [ -n "$dir" ] || continue
     skill_path="$dir/SKILL.md"
     if [ ! -f "$ROOT/$skill_path" ]; then
+      # A renamed or removed skill has no tree at HEAD. Skip its deleted source
+      # directory; the replacement directory is checked independently below.
+      if ! git -C "$ROOT" cat-file -e "HEAD:$dir" 2>/dev/null; then
+        continue
+      fi
       echo "lint-skills: error: changed skill directory has no SKILL.md: $dir" >&2
       failures=1
       continue
