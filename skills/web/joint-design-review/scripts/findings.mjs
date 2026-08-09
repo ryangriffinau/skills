@@ -59,19 +59,29 @@ function validate(rows) {
     if (r.class && !CLASSES.has(r.class)) problems.push(`${at}: class must be A or B`);
     if (seen.has(r.id)) problems.push(`${at}: duplicate id`);
     seen.add(r.id);
-    if (r.class === "B" && r.status !== "ruled" && !r.ruling)
-      problems.push(`${at}: Class B carries no ruling — it must be put to the user`);
     if (r.class === "A" && r.rank == null)
       problems.push(`${at}: Class A carries no rank`);
   }
-  // every dependsOn must resolve to a known id or an external tracker id
+  // An unresolved dependsOn is a warning, not an error: reviews legitimately
+  // depend on a decision in a sibling review ("other-review#B2") or on an issue
+  // in the project tracker. Only a bare same-file-looking id that matches
+  // nothing is worth flagging, and even then it may just be written next.
   for (const r of rows) {
     const dep = r.dependsOn;
-    if (dep && !seen.has(dep) && !/-/.test(dep))
-      problems.push(`${r.id}: dependsOn "${dep}" matches no row and is not an external id`);
+    if (!dep) continue;
+    const external = dep.includes("#") || dep.includes("-");
+    if (!seen.has(dep) && !external)
+      warnings.push(
+        `${r.id}: dependsOn "${dep}" matches no row here. Use "<review>#${dep}" for a sibling review, or a tracker id.`,
+      );
   }
   return problems;
 }
+
+// Unruled Class B is the NORMAL state of a freshly written report — the whole
+// point is to put those decisions to the user. It blocks `materialise`, which
+// checks it separately, and must not block `validate`.
+const warnings = [];
 
 const rows = read();
 
@@ -82,7 +92,11 @@ if (cmd === "validate") {
     for (const p of problems) console.error(`  - ${p}`);
     process.exit(1);
   }
-  console.log(`ok — ${rows.length} rows`);
+  for (const w of warnings) console.error(`  warn: ${w}`);
+  const openB = rows.filter((r) => r.class === "B" && r.status !== "ruled" && !r.ruling);
+  console.log(
+    `ok — ${rows.length} rows${openB.length ? `; ${openB.length} Class B awaiting a ruling (${openB.map((r) => r.id).join(", ")})` : ""}`,
+  );
 } else if (cmd === "summary") {
   const a = rows.filter((r) => r.class === "A");
   const b = rows.filter((r) => r.class === "B");

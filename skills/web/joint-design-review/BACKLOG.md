@@ -158,3 +158,26 @@ effort diagnosing another agent's open work.
 **Fix:** gate 2 should check the surfaces' data path too — the queries, services, and
 validators the area reads — not just its component files. Name it explicitly: an area is
 uncontended when neither its components nor the code it renders from is being edited.
+
+---
+
+## 6. `validate` must not fail on an unruled Class B — FIXED, kept as the reason
+
+**Found:** Kingfield Quality *detail* review, 2026-08-09. Fixed the same day.
+
+The first run of `findings.mjs validate` on a freshly written report failed, because
+`validate` treated an unruled Class B row as a problem. But an unruled Class B is the
+**normal state of a report that has just been written** — putting those decisions to the
+user is the entire purpose of the class. The check belonged to `materialise`, which
+already enforced it separately.
+
+Two lessons worth keeping even though the code is fixed:
+
+- A gate placed at the wrong step turns a correct state into an error, and the pressure
+  is then to weaken the rule rather than move it. Ask *which step* a check defends.
+- The same run rejected `dependsOn: "B2"` because the decision lived in a sibling
+  review's findings file. Cross-review dependencies are legitimate; the qualified form
+  `"<review>#<id>"` now expresses them, and an unresolved dependency is a warning rather
+  than an error, because a row may simply be written next.
+
+`validate` now reports how many Class B rows await a ruling instead of failing on them.
