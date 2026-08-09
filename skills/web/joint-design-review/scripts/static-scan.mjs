@@ -2,7 +2,8 @@
 /**
  * joint-design-review static scan — deterministic design-bar sweep.
  *
- * Usage:  node static-scan.mjs <dir> [<dir> ...] [--exclude <substr>]...
+ * Usage:  node static-scan.mjs <path> [<path> ...] [--exclude <substr>]... [--json]
+ *         Paths may be directories or individual files, in any mix.
  * Output: JSONL findings on stdout ({check, file, line, excerpt}),
  *         summary table on stderr. Exit 0 always — hits are audit
  *         candidates for the model to verify, not a build failure.
@@ -71,24 +72,70 @@ const CHECKS = [
     why: "!important is a specificity dead end",
     re: /!important/,
   },
+  {
+    // Class A #14 over-explanation. A UI sentence long enough that it is
+    // probably explaining something the control already shows. Matches the
+    // string literal wherever it sits, because prose is usually on its own
+    // line inside a ternary rather than beside the element that renders it.
+    check: "verbose-ui-sentence",
+    why: "Over-explanation (Class A #14): a UI sentence long enough to be explaining the obvious",
+    ext: /\.(tsx|jsx|vue|svelte|astro)$/,
+    custom: (line) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(line)) return false; // comments are not UI copy
+      for (const m of line.matchAll(/"([^"\\]{40,})"/g)) {
+        const text = m[1];
+        if (!/[.?]$/.test(text.trim())) continue;
+        if (text.split(/\s+/).length >= 12) return true;
+      }
+      return false;
+    },
+  },
+  {
+    // Class A #14 again: a field label above a control whose own first option
+    // already says the same thing ("Status" over a select reading "Open
+    // findings"; "Customer contact" over "Choose a customer contact").
+    check: "label-restates-control",
+    why: "Over-explanation (Class A #14): a label the control's own value already states",
+    ext: /\.(tsx|jsx|vue|svelte|astro)$/,
+    custom: (line, _i, all, idx) => {
+      const label = line.match(/<Label[^>]*>\s*$|<Label[^>]*>\s*([A-Za-z][A-Za-z ]{2,24}?)\s*</);
+      const text = (label?.[1] ?? all[idx + 1] ?? "").trim();
+      if (!/^[A-Za-z][A-Za-z ]{2,24}$/.test(text)) return false;
+      const head = text.split(/\s+/)[0].toLowerCase();
+      if (head.length < 4) return false;
+      const ahead = all.slice(idx + 1, idx + 14).join(" ").toLowerCase();
+      // the control's placeholder/first option repeats the label's leading word
+      return new RegExp(`(placeholder=|>)\\s*["']?(choose|select|all|pick)?\\s*(an?\\s+)?${head}`).test(
+        ahead,
+      );
+    },
+  },
 ];
 
 const args = process.argv.slice(2);
 const roots = [];
 const excludes = [];
+let asJson = false;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--exclude") excludes.push(args[++i]);
+  else if (args[i] === "--json") asJson = true;
   else roots.push(args[i]);
 }
 if (roots.length === 0) {
-  console.error("usage: static-scan.mjs <dir> [<dir> ...] [--exclude <substr>]");
+  console.error("usage: static-scan.mjs <path> [<path> ...] [--exclude <substr>] [--json]");
   process.exit(2);
 }
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) {
+    let st;
+    try {
+      st = statSync(path);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
       if (!SKIP_DIRS.has(name)) yield* walk(path);
     } else if (SOURCE_EXT.test(name)) {
       yield path;
@@ -96,33 +143,54 @@ function* walk(dir) {
   }
 }
 
-const counts = new Map(CHECKS.map((c) => [c.check, 0]));
-let files = 0;
-for (const root of roots) {
-  for (const file of walk(root)) {
-    if (SKIP_FILES.test(file.split(sep).join("/"))) continue;
-    if (excludes.some((x) => file.includes(x))) continue;
-    files++;
-    const lines = readFileSync(file, "utf8").split("\n");
-    for (const c of CHECKS) {
-      if (c.ext && !c.ext.test(file)) continue;
-      lines.forEach((text, i) => {
-        if (c.re.test(text)) {
-          counts.set(c.check, counts.get(c.check) + 1);
-          console.log(
-            JSON.stringify({ check: c.check, file, line: i + 1, excerpt: text.trim().slice(0, 160) }),
-          );
-        }
-      });
+// Roots may be directories OR files. A missing/unreadable root is a warning,
+// never a crash — an area routinely mixes `quality/` with `quality.tsx`.
+function* resolveRoots(list) {
+  for (const root of list) {
+    let st;
+    try {
+      st = statSync(root);
+    } catch {
+      skipped.push(`${root} (not found)`);
+      continue;
     }
+    if (st.isDirectory()) yield* walk(root);
+    else if (SOURCE_EXT.test(root)) yield root;
+    else skipped.push(`${root} (unsupported extension)`);
   }
 }
 
-console.error(`\nstatic-scan: ${files} files\n`);
-for (const c of CHECKS) {
-  const n = counts.get(c.check);
-  console.error(`  ${n === 0 ? "clear" : String(n).padStart(5)}  ${c.check} — ${c.why}`);
+const skipped = [];
+const counts = new Map(CHECKS.map((c) => [c.check, 0]));
+let files = 0;
+
+for (const file of resolveRoots(roots)) {
+  if (SKIP_FILES.test(file.split(sep).join("/"))) continue;
+  if (excludes.some((x) => file.includes(x))) continue;
+  files++;
+  const lines = readFileSync(file, "utf8").split("\n");
+  for (const c of CHECKS) {
+    if (c.ext && !c.ext.test(file)) continue;
+    lines.forEach((text, i) => {
+      const hit = c.custom ? c.custom(text, i, lines, i) : c.re.test(text);
+      if (!hit) return;
+      counts.set(c.check, counts.get(c.check) + 1);
+      console.log(
+        JSON.stringify({ check: c.check, file, line: i + 1, excerpt: text.trim().slice(0, 160) }),
+      );
+    });
+  }
 }
-console.error(
-  "\nHits are candidates for the audit, not findings. Verify each in context.",
-);
+
+if (asJson) {
+  console.error(JSON.stringify({ files, skipped, counts: Object.fromEntries(counts) }, null, 2));
+} else {
+  console.error(`\nstatic-scan: ${files} files`);
+  if (skipped.length) console.error(`skipped roots: ${skipped.join(", ")}`);
+  console.error("");
+  for (const c of CHECKS) {
+    const n = counts.get(c.check);
+    console.error(`  ${n === 0 ? "clear" : String(n).padStart(5)}  ${c.check} — ${c.why}`);
+  }
+  console.error("\nHits are candidates for the audit, not findings. Verify each in context.");
+}
