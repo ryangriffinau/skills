@@ -48,6 +48,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [project-vision](skills/planning/project-vision) | 🟢 | 1.1.0 | planning, vision | Create/apply/check a compact root `VISION.md` as a durable decision lens |
 | [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | decision-making, multi-agent | 5-advisor council + anonymized peer review + chairman verdict + decision ledger |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
+| [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.1.0 | design, frontend, audit, ux, beads | Per-area design review: audit → standing-approved vs ruling-required triage → bead every finding → implement with screenshot evidence |
 | [goal-plan](skills/planning/goal-plan) | ⚪ | 0.3.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |
 | [pr-closeout](skills/engineering/pr-closeout) | ⚪ | 0.3.0 | git, github | Audit open PRs against sessions / worktrees / trackers and recommend a closeout for each |
 | [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
