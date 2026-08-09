@@ -16,10 +16,22 @@ deliberately excludes.
 
 - Audited at commit `[SHA]`.
 - Dirty files in the area at audit time: [list, or "none"].
+- Data path checked by `contention.mjs`: [clean / contended — which packages].
 - Findings crossing dirty files are marked **provisional** and need a recheck before
   they become work.
 - Prior audits and rulings covering this area: [links]. Rechecked findings from them:
   [finding → current state: fixed / still open / regressed / ruled-and-deferred].
+
+## Deliberate choices
+
+What this area does on purpose, so a finding does not mistake a decision for a defect.
+Say where each was confirmed — a prior spec, a code comment, or the user.
+
+| Behaviour | Deliberate? | Source |
+| --- | --- | --- |
+| [e.g. mobile list shows title only] | yes | [spec link / user, date] |
+
+An empty table means you did not ask. Ask.
 
 ## Findings at a glance
 
