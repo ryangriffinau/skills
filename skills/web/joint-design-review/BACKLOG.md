@@ -181,3 +181,62 @@ Two lessons worth keeping even though the code is fixed:
   than an error, because a row may simply be written next.
 
 `validate` now reports how many Class B rows await a ruling instead of failing on them.
+
+---
+
+## 7. Name the degraded, source-only mode instead of blocking on it
+
+**Found:** Kingfield Quality *detail* review, 2026-08-09.
+
+Preflight gate 1 requires the app to render. When it did not, the review had nowhere to
+go: the gate says stop, but the user wanted progress, and a source pass is genuinely
+useful. The mode was improvised, and improvised modes do not carry their own caveats
+into the next session.
+
+**Two corrections, and the second is the one that matters.**
+
+First, make the gate a *completion* condition rather than a *start* condition. A review
+may begin without a rendering app; it may not be **closed** without one. Stamp the report
+`evidence: partial`, mark each row's `evidence` field `source-only`, and let
+`findings.mjs` refuse to report the review complete while any row is still source-only.
+
+Second, and this is the part a future reader will want to argue with: **source-first is
+not the faster default.** The user proposed making it standard on efficiency grounds. The
+efficiency is real but it comes from *parallelism*, not from the order — captures are
+slow and I/O-bound, so the win is starting them and reading source while they run.
+
+Reordering has a cost the reordering hides. Reading source first builds a model of what
+the code *says* it does, and the images then get read as confirmation of that model. In
+the worklist review the largest finding — facet counts claiming 70 against a list of 55 —
+came from measuring the rendered page. The code is internally consistent; no amount of
+reading would have surfaced it. Same for a 1056px table inside a 390px viewport.
+
+So step 4 should read: scan, **start the captures, read source while they run**, then
+return to the images with the source model in hand. Degraded mode is what you fall back
+to when the captures cannot run at all — a named state with a named debt, not a shortcut
+to choose on purpose.
+
+---
+
+## 8. The over-explanation check misses the most common shape
+
+**Found:** Kingfield Quality *detail* review, 2026-08-09.
+
+`verbose-ui-sentence` has a 12-word floor, tuned on the intake form's long explanatory
+sentences. The detail page's dominant copy defect is shorter and slipped straight through:
+four of five dialog descriptions restate their own title.
+
+> "Cancel work order" → *"Record why this physical work order is being cancelled."*
+> "Reject workflow step" → *"Record why this workflow step is being rejected."*
+> "Revise workflow decision" → *"Record why this rejected workflow step is now approved."*
+
+Eight to eleven words each, so all three are under the floor. The user spotted the pattern
+and asked whether it had been captured. It had not.
+
+The defect is not length, it is **redundancy against an adjacent label**. Word count was a
+proxy that happened to work once.
+
+**Fix:** add a `description-restates-title` check — a `description` prop whose content
+shares its head noun with the sibling `title` prop, or repeats the title's distinctive
+words. This is the same shape as the existing `label-restates-control` check, one level
+up, and it should reuse that comparison rather than grow a second heuristic.
