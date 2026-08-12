@@ -240,3 +240,37 @@ proxy that happened to work once.
 shares its head noun with the sibling `title` prop, or repeats the title's distinctive
 words. This is the same shape as the existing `label-restates-control` check, one level
 up, and it should reuse that comparison rather than grow a second heuristic.
+
+---
+
+## 9. Copy dedupe: the page already says it
+
+**Found:** Kingfield Quality round 2, 2026-08-10. Ryan: *"good pick up that we should
+ensure is folded into our joint-design-review skill for copy clean up/dedupe etc."*
+
+Class A #14 (over-explanation) catches prose that explains the obvious and labels that
+restate their control. It does not catch the third shape: **copy that repeats what
+another element on the same screen already states.** The Quality worklist carried an h1
+"Quality review" and the subtitle "Review evidence, status, and permitted follow-through
+for approved findings." directly beneath a breadcrumb that already read Quality — the
+subtitle describing the page to someone already standing on it.
+
+The same disease produced the detail page's worst finding: status rendered three times,
+severity twice, the piece count under three different names. Over-explanation and
+duplication are one family — *the interface saying a thing more than once* — and the
+audit caught the second only after the user pointed at it.
+
+**Add to Class A #14 as a third shape, and give the audit a mechanical counterpart:**
+
+- Extend the dimension to ask "what does this screen say more than once?" — values,
+  labels, and headings alike.
+- Add a `page-repeats-breadcrumb` check to `static-scan.mjs`: a page-level heading whose
+  text matches its route segment or breadcrumb terminal crumb.
+- Better, add a runtime counterpart to the capture harness, because the strongest
+  evidence here was a DOM count of how many times one value appeared. `shoot.mjs` already
+  loads the page; counting occurrences of the record's own field values is cheap and
+  catches what source reading cannot.
+
+**Carry the a11y constraint with the rule**, or the fix trades one defect for another:
+removing a visible page heading must not leave the document without an `h1`. Keep a
+visually-hidden heading or promote the terminal crumb.
