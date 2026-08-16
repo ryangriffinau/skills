@@ -89,6 +89,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-flywheel-conductor-jsm](prompts/p-flywheel-conductor-jsm.md) | 🟢 | Prime the project, launch a 3×cod + 1×cc NTM swarm using jsm skills, and loop every 5 minutes feeding idle agents from beads |
 | [p-tangible-progress](prompts/p-tangible-progress.md) | 🟢 | Bind a session or swarm to working-software-only progress — no process porn, honest credit |
 | [p-hitl](prompts/p-hitl.md) | 🟡 | Force a complete, paste-ready hand-back of every decision, blocker, and action needing you |
+| [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
 ## Credits
 
 This collection stands on others' work:
