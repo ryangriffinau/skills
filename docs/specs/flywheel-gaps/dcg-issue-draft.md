@@ -1,6 +1,6 @@
 # DCG issue draft — substring matches inside quoted payloads block the enclosing safe command
 
-> **Status:** DRAFT for `Dicklesworthstone/destructive_command_guard`. Do **not** post
+> **Status:** CLOSED (non-issue) for `Dicklesworthstone/destructive_command_guard`. Do **not** post
 > until the operator approves. When posted, record the issue URL at the bottom.
 
 **Title:** Guard substring-matches destructive tokens inside quoted string payloads, blocking safe enclosing commands
