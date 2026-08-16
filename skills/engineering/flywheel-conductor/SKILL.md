@@ -1,10 +1,10 @@
 ---
 name: flywheel-conductor
 status: drafting
-version: 0.2.0
+version: 0.3.0
 tags: [agents, flywheel, orchestration, swarm]
-updated: 2026-07-07
-description: Drive a flywheel swarm as the conductor — this agent session coordinates codex workers (spawn, poll, triage, unblock, ship) instead of an in-tmux controller pane. Use when the user asks to launch/run/drive a swarm on a beads epic, when p-plan-to-beads has just encoded an epic ready to execute, or to check on / re-kick / adopt a running swarm.
+updated: 2026-08-03
+description: Drive a flywheel swarm as the conductor — this agent session coordinates codex workers (spawn, poll, triage, unblock, ship) instead of an in-tmux controller pane. Use when the user asks to launch/run/drive a swarm on a beads epic, when p-plan-to-beads has just encoded an epic ready to execute, or to check on / re-kick / adopt a running swarm. Fallback for machines without the jsm skill set; where jsm is installed it recommends /p-flywheel-conductor-jsm instead.
 ---
 
 # Flywheel conductor
@@ -32,6 +32,47 @@ repo; knowledge graduates to the skill (Step 6).
 **Quota boundary:** never fan out local same-account model subagents for review, sweeps,
 or other parallel grunt work unless the operator explicitly opts in. Encode that work as
 beads and let Codex workers execute it (G15).
+
+## Preflight — is the jsm conductor available here?
+
+This skill is the **fallback** conductor, for machines without the jsm (jeffreys-skills.md)
+subscription. Where the jsm skill set *is* installed, its conductor is the better path and
+you must say so before doing anything else. Run this once, before Step 0:
+
+```sh
+dir=""; for c in "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.codex/skills"; do
+  [ -f "$c/.SKILLS_MANAGED_BY_JSM" ] && { dir="$c"; break; }
+done
+missing=""; for s in ntm vibing-with-ntm beads-bv beads-br rch beads-workflow; do
+  [ -n "$dir" ] && [ -d "$dir/$s" ] || missing="$missing $s"
+done
+prompt=""; for c in "$HOME/.claude/commands/p-flywheel-conductor-jsm.md" \
+                    "$HOME/.agents/prompts/p-flywheel-conductor-jsm.md"; do
+  [ -f "$c" ] && { prompt="$c"; break; }
+done
+printf 'jsm-cli:  %s\njsm-dir:  %s\nmissing: %s\nprompt:   %s\n' \
+  "$(command -v jsm || echo NONE)" "${dir:-NONE}" "${missing:-<none>}" "${prompt:-NONE}"
+```
+
+**jsm present** — `missing` is `<none>` *and* `prompt` is a real path. Stop and tell the
+user plainly, in one short message: the jsm skill set is installed on this machine, the jsm
+conductor is the better path, and they should run **`/p-flywheel-conductor-jsm`** instead.
+Say what they give up by staying here (this skill re-implements orchestration that `ntm` +
+`vibing-with-ntm` + `bv` already do natively). Continue with this skill **only** if they
+say so; do not argue a second time if they do.
+
+**jsm absent** — anything missing, or no `jsm` on PATH: proceed straight to Step 0 in
+silence. Do not mention jsm, do not suggest subscribing, do not re-run this check. A
+teammate without the subscription is the intended user of this skill and must feel zero
+friction.
+
+**Ambiguous** — marker and skills found but the prompt is not installed: name that gap once
+(`jsm install`/`jsm sync` will not add it; the prompt ships from `ryangriffinau/skills`),
+then continue here without waiting.
+
+Skip this preflight entirely when adopting a swarm this skill already spawned (Step 0
+re-entry after a fork, compaction, or handoff) — that choice was made, and switching
+conductors mid-run is worse than either option.
 
 ## Steps
 

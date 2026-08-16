@@ -48,6 +48,8 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [project-vision](skills/planning/project-vision) | 🟢 | 1.1.0 | planning, vision | Create/apply/check a compact root `VISION.md` as a durable decision lens |
 | [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | decision-making, multi-agent | 5-advisor council + anonymized peer review + chairman verdict + decision ledger |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
+| [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.0 | design, frontend, audit, ux, beads | Per-area design review: audit → standing-approved vs ruling-required triage → materialise findings into issues → implement with screenshot evidence |
+| [write-project-update](skills/comms/write-project-update) | 🟡 | 0.10.0 | communication, reporting, changelog | Evidence-grounded customer, public-changelog, or internal project update with asks, source audit, and channel-native formatting |
 | [goal-plan](skills/planning/goal-plan) | ⚪ | 0.3.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |
 | [pr-closeout](skills/engineering/pr-closeout) | ⚪ | 0.3.0 | git, github | Audit open PRs against sessions / worktrees / trackers and recommend a closeout for each |
 | [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
@@ -58,6 +60,8 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.3.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
 
 > Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`, `flywheel-local-launcher`, `flywheel-conductor`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
+
+> `flywheel-conductor` is the fallback for teammates without the jsm skill set — it preflights for jsm and recommends the jsm conductor when it's present.
 
 ## Prompts
 
@@ -81,6 +85,11 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-deep-project-primer](prompts/p-deep-project-primer.md) | 🟡 | Read project instructions and understand architecture |
 | [p-deploy-and-verify](prompts/p-deploy-and-verify.md) | 🟡 | Deploy an app and verify desktop and mobile behavior |
 | [p-copy-deslopifier](prompts/p-copy-deslopifier.md) | 🟡 | Brand/voice-neutral cleanup of AI-sounding copy, narrower than `copy-editing` |
+| [p-install-agent-skill](prompts/p-install-agent-skill.md) | 🟡 | Audit and install any agent skill once, then bridge it safely across runtimes |
+| [p-flywheel-conductor-jsm](prompts/p-flywheel-conductor-jsm.md) | 🟢 | Prime the project, launch a 3×cod + 1×cc NTM swarm using jsm skills, and loop every 5 minutes feeding idle agents from beads |
+| [p-tangible-progress](prompts/p-tangible-progress.md) | 🟢 | Bind a session or swarm to working-software-only progress — no process porn, honest credit |
+| [p-hitl](prompts/p-hitl.md) | 🟡 | Force a complete, paste-ready hand-back of every decision, blocker, and action needing you |
+| [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
 
 ## Credits
 

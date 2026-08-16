@@ -4,7 +4,7 @@ FLYWHEEL_MODE=team
 FLYWHEEL_WORKTREES=false
 FLYWHEEL_PRECOMMIT=light
 FLYWHEEL_PREPUSH=full
-FLYWHEEL_PROJECTION_APP=
+FLYWHEEL_PROJECTION_APP=linear
 
 # To project beads to Linear, set FLYWHEEL_PROJECTION_APP=linear and add:
 # .flywheel/projects.tsv  # epic-id<TAB>linear-project-id

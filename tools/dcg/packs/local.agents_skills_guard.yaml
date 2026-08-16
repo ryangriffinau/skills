@@ -1,0 +1,31 @@
+id: local.agents_skills_guard
+name: Agents Skills Symlink Guard
+version: 1.1.0
+description: >
+  Requires explicit approval before a symlink is CREATED inside ~/.agents/skills.
+  That directory is the canonical install root for the `skills` CLI: it writes
+  REAL skill directories there (universal across agents) and auto-symlinks
+  agent-specific dirs like ~/.claude/skills back to it. A hand-made symlink in
+  ~/.agents/skills bypasses `skills add`/`skills update` and ~/.agents/.skill-lock.json,
+  so the skill silently stops tracking its canonical repo. Use the CLI instead.
+keywords:
+  - ln
+destructive_patterns:
+  - name: symlink-into-agents-skills
+    description: Hand-made symlink whose link path lands inside ~/.agents/skills
+    pattern: '^(?:\S*/)?ln\s+(?:(?:-[a-zA-Z]*s[a-zA-Z]*)|--symbolic)\s+\S+\s+\S*\.agents/skills(?:/\S*)?\s*$'
+    explanation: >
+      ~/.agents/skills is managed by the `skills` CLI, which installs real
+      directories there and symlinks agent dirs (.claude, .codex) back to it.
+      A symlink placed INTO ~/.agents/skills (e.g. pointing at a repo clone)
+      bypasses the CLI's source tracking and `skills update`, creating a second
+      source of truth that drifts from the canonical repo. This rule only matches
+      when the symlink's destination is under ~/.agents/skills; symlinks whose
+      destination is an agent dir (.claude/.codex) are allowed, since the CLI
+      legitimately creates those.
+    message: >
+      Blocked: install skills with `npx skills add <owner>/<repo>` (real copy in
+      ~/.agents/skills + auto-symlinks for agent dirs) and keep them current with
+      `npx skills update` — do not hand-symlink into ~/.agents/skills. Approve
+      explicitly only if you genuinely intend a manual override.
+safe_patterns: []

@@ -1,9 +1,9 @@
 ---
 name: flywheel-local-launcher
 status: drafting
-version: 0.5.1
+version: 0.5.2
 tags: [agents, flywheel, orchestration, setup]
-updated: 2026-07-09
+updated: 2026-08-03
 description: "Make a local repo ready for the Agent Flywheel and manage its projects_base symlink. Preflight-checks the flywheel stack (Agent Mail, beads, ntm, dcg, cass, ubs), links the repo into NTM's projects_base, runs per-repo init, and routes onboarding by first detecting an existing workflow system: Case A migration vs Case B greenfield setup."
 ---
 
@@ -55,6 +55,30 @@ Run the bundled script `scripts/flywheel-link.sh` from inside the target repo:
 | `setup [path]` | `link` + `br init` (+ a starter **verification bead**) + `ntm init` + lease guard + `.flywheel/profile`, check AGENTS.md, then run `verify` |
 | `verify [path]` | **Success test** — confirm the repo is linked into `projects_base` (so `ntm spawn` resolves it) AND holds a completable bead; the proof the flywheel is live here. (`ntm list` shows active *sessions*, not linked projects — a repo can be flywheel-ready with no running swarm.) |
 | `list` | List projects currently linked into `projects_base` |
+
+For Case A remediation, run the bundled audit-first helper. Both operations are
+read-only until `--apply` is supplied:
+
+```bash
+# Refuses to move anything while live tracked files still contain the retired
+# workflow token or refer to the candidate path. Successful candidates are
+# preserved under archive/flywheel-decommission/ with their original paths.
+bash scripts/flywheel-remediate.sh decommission \
+  --legacy-token '<old-system-token>' \
+  --archive-path .backpocket/orchestrator/tasks
+bash scripts/flywheel-remediate.sh decommission \
+  --legacy-token '<old-system-token>' \
+  --archive-path .backpocket/orchestrator/tasks --apply
+
+# Reports tracked state and machine-local paths, then preserves local contents,
+# adds .ntm/ to .gitignore, and removes only .ntm's Git index entries.
+bash scripts/flywheel-remediate.sh untrack-ntm
+bash scripts/flywheel-remediate.sh untrack-ntm --apply
+```
+
+The runnable regression proof is `tests/flywheel-remediate.test.sh`. It creates a
+throwaway Git project and `projects_base` symlink, exercises both remediations,
+asserts their outcomes, then removes the symlink and sandbox.
 
 Typical onboarding, from inside the repo:
 ```bash

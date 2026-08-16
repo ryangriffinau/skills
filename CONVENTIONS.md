@@ -12,7 +12,7 @@ skills/<category>/<name>/SKILL.md   # required entrypoint
 prompts/p-<name>.md                  # slash-command prompts (separate from skills)
 ```
 
-Categories are organizational only (`decision`, `planning`, `engineering`, `git`, `web`, `meta`). Maturity is **not** a folder — promoting a skill is a one-line frontmatter edit, never a directory move.
+Categories are organizational only (`decision`, `planning`, `engineering`, `git`, `web`, `comms`, `meta`). Maturity is **not** a folder — promoting a skill is a one-line frontmatter edit, never a directory move.
 
 ## Frontmatter schema
 

@@ -1,0 +1,36 @@
+# tools/dcg profile: backpocket
+#
+# For a teammate working the platform-monorepo who doesn't own infrastructure.
+# Drops the infra/data domain packs (terraform, s3, cloudflare, postgres,
+# supabase, docker) they never exercise — you don't need the Postgres rules if
+# you never run psql.
+#
+# This is DOMAIN SCOPING, NOT SAFETY REDUCTION. All five local.* guards and
+# `core` are present, exactly as in `full`. There is no "lax" profile, and the
+# installer structurally rejects any profile missing a guard.
+#
+# Profile schema v1: schema_version, name, [packs].enabled only.
+#
+# NOTE: profiles are managed MINIMUMS. Selecting `backpocket` after `full`
+# stops this installer MANAGING the dropped infra packs; it does not delete
+# foreign pre-existing entries, so the effective config may remain a superset.
+
+schema_version = 1
+name = "backpocket"
+
+[packs]
+enabled = [
+  # --- core / system
+  "core",
+  "system.disk",
+  "package_managers",
+  # --- platform (PR + billing surfaces the monorepo actually touches)
+  "platform.github",
+  "payment.stripe",
+  # --- local guards (REQUIRED in every profile)
+  "local.agents_skills_guard",
+  "local.no_squash_merge",
+  "local.convex_prod_deploy_guard",
+  "local.no_bypass_prepush",
+  "local.no_worktrees",
+]

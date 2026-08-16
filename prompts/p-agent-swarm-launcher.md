@@ -5,39 +5,45 @@ argument-hint: [epic-id] [branch]
 
 You are one worker in a flywheel swarm. Arguments (if given): the beads epic to work and
 the branch to work on. If absent, derive them from AGENTS.md, `.flywheel/profile`, and
-`br ready`.
+`br --db <path> ready`.
 
 **Orient (once):** Read ALL of AGENTS.md and README.md carefully. Use your code
 investigation mode to understand the architecture and purpose of the project. Register
-with MCP Agent Mail and introduce yourself to the other agents. Work ONLY on the given
-feature branch — NEVER main, NEVER git worktrees.
+with MCP Agent Mail and introduce yourself to the other agents. Use Agent Mail through
+its MCP tools or the local HTTP endpoint at `http://127.0.0.1:8765`; use Beads as
+`br --db <path>`, with the exact database path from `br where`. Use those interfaces
+directly instead of scanning the filesystem for tooling. Work ONLY on the given feature
+branch — NEVER main, NEVER git worktrees.
 
-**The loop — repeat until `br ready` is empty; NEVER stop after one bead:**
+**The loop — repeat until `br --db <path> ready` is empty; NEVER stop after one bead:**
 
-1. `br ready` → claim the top unblocked bead you can usefully do:
-   `br update <id> --status in_progress`.
+1. `br --db <path> ready` → claim the top unblocked bead you can usefully do:
+   `br --db <path> update <id> --status in_progress`.
 2. **Reserve before editing.** Reserve the exact files you will touch via Agent Mail (the
-   bead id is the reason). Agent Mail = the MCP tools / `http://127.0.0.1:8765` — NEVER
-   scan the filesystem hunting for tooling interfaces.
+   bead id is the reason).
 3. Pull prior context when it may exist: `cass pack --robot "<topic>"`.
 4. **Check for existing work first:** if the bead's work already exists in the tree
    (commits, files), verify it, commit it, close it — do not redo it.
 5. Implement + tests per the bead's acceptance criteria. Make minimal, surgical changes.
 6. Verify **one-shot only**: the repo's typecheck; the bead's own tests;
-   `ubs --staged --fail-on-warning`; a fresh-eyes self-review. NEVER watch/interactive
-   modes, NEVER a persistent dev server — e2e uses the Playwright `webServer` config with
-   `reuseExistingServer: true`.
+   `ubs --staged --fail-on-warning`; a fresh-eyes self-review. NEVER run watch/dev modes
+   or start a persistent dev server. Use one-shot equivalents: `convex dev --once`, test
+   runners with watch disabled, and Playwright with `--reporter=line`. E2e uses the
+   Playwright `webServer` config with `reuseExistingServer: true` so the server starts and
+   stops inside the run.
 7. Commit with EXPLICIT paths (Conventional Commits, lowercase subject) → **push
-   immediately** → only then `br close <id>` and commit/push the tracker state. A bead is
-   not done while its work is uncommitted or unpushed.
+   immediately** → only then `br --db <path> close <id>` and commit/push the tracker
+   state. A bead is not done while its work is uncommitted or unpushed.
 8. Go to 1.
 
 **Blocked?** If a bead needs something you cannot provide (external secret, deployment
-env, a human decision): `br update <id> --status blocked`, add a `br comments add` note
-saying exactly what is missing and the exact command that resumes it, post the blocker to
-Agent Mail, and MOVE ON to the next ready bead. Missing env vars must include
+env, a human decision): `br --db <path> update <id> --status blocked`, add a
+`br --db <path> comments add <id>` note saying exactly what is missing and the exact
+command that resumes it, post the blocker to Agent Mail, and MOVE ON to the next ready
+bead. Missing env vars must include
 `ENV-MISSING: <NAME>` in the bead comment so conductor triage can unblock via the env
-preflight path. Never close a red bead; never idle while `br ready` is non-empty.
+preflight path. Never close a red bead; never idle while `br --db <path> ready` is
+non-empty.
 
 **Coordination:** respect serial chains encoded in the bead graph — never start a blocked
 bead. If your target files are reserved by another agent, pick a non-conflicting ready

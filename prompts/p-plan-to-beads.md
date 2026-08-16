@@ -7,6 +7,13 @@ You are converting a finalized, synthesized implementation plan into a concrete 
 
 Take ALL of the plan below and, where it helps, elaborate on it further, then create a comprehensive and granular set of beads that cover the entire plan: epics, tasks, and subtasks (as needed), with the full dependency structure overlaid between them so that ready work can be triaged correctly and nothing starts before its prerequisites. Each bead must carry detailed, self-contained comments — enough context, reasoning, file/scope hints, and acceptance criteria that an agent picking up that bead cold, with no other context, can complete it correctly without stepping on other agents' work. Decompose so that independent beads touch non-overlapping files wherever possible.
 
+Make every chain that edits the same subsystem (especially auth or schema migrations)
+single-owner and explicitly serial in the graph. Prompt-level instructions such as "run
+these serially" are advisory only; **only dependency edges enforce serialization**. At
+encode time, verify that each later bead in the chain depends on its immediate predecessor
+(`br dep add <later> <earlier>`). If you discover a missing edge later, add it immediately
+rather than telling a ready worker to wait.
+
 Use ONLY the `br` CLI to create and modify the beads — create the epics/tasks/subtasks, set the dependencies between them, and attach the detailed comments all through `br`. Do not write pseudo-beads as markdown or invent a parallel task format. When you are finished, summarise the epic/task/subtask structure and the dependency graph you created so it can be reviewed.
 
 Human-facing gates need a second interface: if a bead requires human judgment or approval,

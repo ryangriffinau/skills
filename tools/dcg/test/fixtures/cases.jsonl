@@ -1,0 +1,61 @@
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:pnpm-deploy-prod-script","command":"pnpm run deploy:prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"npx convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"pnpm dlx convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"./node_modules/.bin/convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"cd subdir && convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex data && convex deploy"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex deploy --prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex deploy --dry-run"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:deploy-exec-script","command":"bash scripts/deploy-exec.sh"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY convex dev"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"CONVEX_DEPLOYMENT=prod:example convex dev"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"convex dev --prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"convex dev --deployment prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-push","command":"convex run m:mutate --prod --push"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-push","command":"convex run m:mutate --push --deployment team:project:prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-mcp-dangerous","command":"convex mcp start --dangerously-enable-production-deployments"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-deployment-create","command":"convex deployment create staging --type prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:deployment-token-create","command":"convex deployment token create my-token"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-deployment-select","command":"convex deployment select team:project:prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-import-replace-all","command":"convex import snapshot.zip --replace-all --prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-write","command":"CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY convex run m:doThing"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-write","command":"convex run m:mutate --deployment prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-import","command":"convex import --prod snapshot.jsonl"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-import","command":"convex import snapshot.zip --deployment=prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-env-write","command":"convex env set FLAG on --prod"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-env-write","command":"convex env --deployment prod set FLAG on"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-export","command":"convex export --prod --path snapshot.zip"}
+{"expect":"deny","rule":"local.convex_prod_deploy_guard:deployment-token-delete","command":"convex deployment token delete my-token"}
+{"expect":"deny","rule":"local.no_squash_merge:gh-pr-merge-squash","command":"gh pr merge 12 --squash"}
+{"expect":"deny","rule":"local.no_squash_merge:gh-pr-merge-squash","command":"gh --repo o/r pr merge 12 --squash"}
+{"expect":"deny","rule":"local.no_squash_merge:git-merge-squash","command":"git merge feature --squash"}
+{"expect":"deny","rule":"local.no_squash_merge:git-merge-squash","command":"git -C repo merge feature --squash"}
+{"expect":"deny","rule":"local.agents_skills_guard:symlink-into-agents-skills","command":"ln -s /some/repo ~/.agents/skills/foo"}
+{"expect":"deny","rule":"local.agents_skills_guard:symlink-into-agents-skills","command":"ln --symbolic /some/repo ~/.agents/skills/foo"}
+{"expect":"deny","rule":"local.agents_skills_guard:symlink-into-agents-skills","command":"/bin/ln -s /some/repo ~/.agents/skills/foo"}
+{"expect":"deny","rule":"local.no_bypass_prepush:git-push-no-verify","command":"git push origin feature --no-verify"}
+{"expect":"deny","rule":"local.no_bypass_prepush:skip-prepush-verify-env","command":"SKIP_PREPUSH_VERIFY=1 git push origin feature"}
+{"expect":"deny","rule":"local.no_bypass_prepush:git-commit-no-verify","command":"git commit -n -m checkpoint"}
+{"expect":"deny","rule":"local.no_worktrees:git-worktree-add","command":"git worktree add ../feature feature"}
+{"expect":"allow","command":"pnpm run deploy:staging"}
+{"expect":"allow","command":"convex dev"}
+{"expect":"allow","command":"convex data --prod"}
+{"expect":"allow","command":"convex data --deployment prod"}
+{"expect":"allow","command":"convex logs --prod"}
+{"expect":"allow","command":"convex env get FLAG --prod"}
+{"expect":"allow","command":"CONVEX_DEPLOY_KEY=prod:example convex codegen"}
+{"expect":"allow","command":"convex run m:readThing"}
+{"expect":"allow","command":"CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY convex data"}
+{"expect":"allow","command":"export CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY"}
+{"expect":"allow","command":"gh pr merge 12 --merge"}
+{"expect":"allow","command":"convex dev --deployment prod-staging"}
+{"expect":"allow","command":"convex run fn --deployment team:project:prod-staging"}
+{"expect":"allow","command":"convex import data.zip --deployment prod.staging"}
+{"expect":"allow","command":"convex deployment create preview --type preview"}
+{"expect":"allow","command":"convex deployment select team:project:dev"}
+{"expect":"allow","command":"convex import snapshot.zip --replace-all"}
+{"expect":"allow","command":"git push origin feature"}
+{"expect":"allow","command":"git commit -m checkpoint"}
+{"expect":"allow","command":"git merge feature"}
+{"expect":"allow","command":"ln -s ~/.agents/skills/foo ~/.claude/skills/foo"}

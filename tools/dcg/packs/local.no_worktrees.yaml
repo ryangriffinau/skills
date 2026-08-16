@@ -1,0 +1,26 @@
+id: local.no_worktrees
+name: Worktree Creation Ban
+version: 1.0.0
+description: >
+  Worktrees require Ryan's explicit permission (Ryan, 2026-07-20). Per
+  Emmanuel's flywheel methodology, git worktrees are an anti-pattern in
+  multi-agent work: they fork the working set into parallel copies, cause
+  exponential coordination complexity (stale node_modules, divergent env
+  files, orphaned branches, drift between copies), and slow everything down.
+  The flywheel model is ONE shared tree with bead ownership and conductor-
+  sequenced branch transitions. If isolation is truly needed, ask Ryan first.
+keywords:
+  - git
+  - worktree
+destructive_patterns:
+  - name: git-worktree-add
+    description: any git worktree add
+    pattern: 'git\s+worktree\s+add\b'
+    explanation: >
+      Creates a parallel checkout of the repository. In multi-agent flywheel
+      work this forks the working set: agents build against divergent copies,
+      env/deps drift, and merge/coordination complexity grows exponentially.
+    message: >
+      Blocked: creating git worktrees requires Ryan's explicit permission
+      (flywheel policy: worktrees are an anti-pattern — one shared tree,
+      conductor-sequenced). Ask Ryan in chat before proceeding.
