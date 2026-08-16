@@ -274,3 +274,32 @@ audit caught the second only after the user pointed at it.
 **Carry the a11y constraint with the rule**, or the fix trades one defect for another:
 removing a visible page heading must not leave the document without an `h1`. Keep a
 visually-hidden heading or promote the terminal crumb.
+
+---
+
+## 10. Where new UI comes from is a rule, not a preference
+
+**Found:** Kingfield Quality round 4, 2026-08-14. Ryan: *"you must build from battle tested,
+composable shadcn (or failing that kibo/ai component) components."*
+
+The skill says "load `/pick-ui-library`" and "never recreate what is installed", which
+covers reuse of what a repo already has. It says nothing about where a genuinely NEW
+component must come from — so a bead that needed a Collapsible was written as "add the
+shadcn Collapsible", correct by luck rather than by rule, and a reader could as easily have
+hand-rolled it.
+
+**Add to step 8 (implement) as a hard rule, with the source order stated:**
+
+1. shadcn — and the **variant that matches the repo** (Radix vs Base UI). The two must
+   not be mixed; the 08-08 audit recorded why (two focus models, two portal layers).
+2. Failing that, kibo-ui or ai-elements — reference their source for structure; do not
+   install them into the project.
+3. For patterns rather than components, kibo-ui/patterns as reference.
+
+And one trap worth naming: shadcn's docs now default some pages to the Base UI variant.
+A URL pasted from the docs is not proof it is the right variant for the repo. Check
+`packages/ui`'s dependencies first.
+
+**Mechanical counterpart:** `static-scan.mjs` could flag a new file under `packages/ui/src`
+whose imports contain neither `@radix-ui/*`, `radix-ui`, `@base-ui/*`, nor `cmdk` — a
+primitive built from nothing.
