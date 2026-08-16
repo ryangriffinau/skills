@@ -48,6 +48,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [project-vision](skills/planning/project-vision) | 🟢 | 1.1.0 | planning, vision | Create/apply/check a compact root `VISION.md` as a durable decision lens |
 | [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | decision-making, multi-agent | 5-advisor council + anonymized peer review + chairman verdict + decision ledger |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
+| [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.0 | design, frontend, audit, ux, beads | Per-area design review: audit → standing-approved vs ruling-required triage → materialise findings into issues → implement with screenshot evidence |
 | [write-project-update](skills/comms/write-project-update) | 🟡 | 0.10.0 | communication, reporting, changelog | Evidence-grounded customer, public-changelog, or internal project update with asks, source audit, and channel-native formatting |
 | [goal-plan](skills/planning/goal-plan) | ⚪ | 0.3.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |
 | [pr-closeout](skills/engineering/pr-closeout) | ⚪ | 0.3.0 | git, github | Audit open PRs against sessions / worktrees / trackers and recommend a closeout for each |
@@ -88,7 +89,6 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-flywheel-conductor-jsm](prompts/p-flywheel-conductor-jsm.md) | 🟢 | Prime the project, launch a 3×cod + 1×cc NTM swarm using jsm skills, and loop every 5 minutes feeding idle agents from beads |
 | [p-tangible-progress](prompts/p-tangible-progress.md) | 🟢 | Bind a session or swarm to working-software-only progress — no process porn, honest credit |
 | [p-hitl](prompts/p-hitl.md) | 🟡 | Force a complete, paste-ready hand-back of every decision, blocker, and action needing you |
-
 ## Credits
 
 This collection stands on others' work:
