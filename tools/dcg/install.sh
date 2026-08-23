@@ -15,6 +15,7 @@ REQUIRED_GUARDS=(
   local.convex_prod_deploy_guard
   local.no_bypass_prepush
   local.no_worktrees
+  local.agent_loop_guard
 )
 
 die() { printf 'install.sh: error: %s\n' "$*" >&2; exit 1; }

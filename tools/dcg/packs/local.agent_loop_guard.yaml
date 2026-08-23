@@ -1,0 +1,48 @@
+id: local.agent_loop_guard
+name: Agent Loop Skill Guard
+version: 1.0.0
+description: >
+  Requires Ryan's explicit approval before an agent starts a LOOP SKILL in
+  another agent (Ryan ruling, 2026-08-23, during flywheel conducting). The
+  /loop skills in Claude Code and Codex schedule recurring self-invocation;
+  an agent that starts one in a subprocess or a sibling pane creates an
+  unsupervised recurring consumer of account quota. DCG cannot see whether a
+  flywheel swarm is running, so per Ryan's fallback ruling this blocks ALL
+  shell-mediated loop-skill starts unless he approves the specific command.
+  Conductors use the sanctioned mechanical tick instead. NOTE the boundary:
+  DCG guards shell commands only. A loop started by an agent's own in-process
+  tools (Skill invocation, ScheduleWakeup, CronCreate inside Claude Code)
+  never reaches the shell and is recorded in known-gaps; harness-level
+  permission rules own that surface.
+keywords:
+  - claude
+  - codex
+  - ntm
+  - tmux
+destructive_patterns:
+  - name: agent-cli-loop-skill
+    description: claude/codex/ntm invocation carrying a standalone /loop token
+    pattern: '(?:^|[\s|;&(])(?:\S*/)?(?:claude|codex|ntm)\b[^|;&]*[\s"''=(]/loop(?:[\s"'')]|$)'
+    explanation: >
+      A claude, codex, or ntm command whose arguments carry a standalone
+      /loop token starts (or injects) a recurring loop skill in an agent.
+      The delimiter classes around /loop keep paths like src/loop.ts and
+      docs/loop/x.md from matching; only the skill-invocation token shape
+      does.
+    message: >
+      Blocked: starting a loop skill in an agent needs Ryan's explicit
+      approval (ruling 2026-08-23). Flywheel conducting uses the mechanical
+      tick, not agent-side /loop. Approve only if Ryan sanctioned this exact
+      loop.
+  - name: tmux-inject-loop-skill
+    description: tmux key/buffer injection carrying a standalone /loop token
+    pattern: '^(?:\S*/)?tmux\b.*\b(?:send-keys|paste-buffer|set-buffer)\b[^|;&]*[\s"''=(]/loop(?:[\s"'')]|$)'
+    explanation: >
+      tmux send-keys / set-buffer / paste-buffer carrying a standalone /loop
+      token types a loop-skill invocation into a pane that is running an
+      agent. Buffer loads from files are invisible to this rule and are
+      recorded in known-gaps.
+    message: >
+      Blocked: typing /loop into an agent pane needs Ryan's explicit
+      approval (ruling 2026-08-23). Dispatch bead briefs, not loop skills.
+safe_patterns: []
