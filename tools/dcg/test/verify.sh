@@ -87,7 +87,7 @@ while IFS= read -r record || [[ -n "$record" ]]; do
 
   if [[ "$expected" == "deny" ]]; then
     if jq -e --arg rule "$expected_rule" \
-      '.schema_version == 2 and .decision == "deny" and .match.rule_id == $rule' \
+      '(.schema_version == 2 or .schema_version == 3) and .decision == "deny" and .match.rule_id == $rule' \
       >/dev/null <<<"$output"; then
       printf 'ok %d - deny: %s\n' "$total" "$command_text"
       passed=$((passed + 1))
@@ -99,7 +99,7 @@ while IFS= read -r record || [[ -n "$record" ]]; do
     fi
   else
     if jq -e \
-      '.schema_version == 2 and .decision == "allow" and (has("match") | not)' \
+      '(.schema_version == 2 or .schema_version == 3) and .decision == "allow" and ((has("match") | not) or .match == null)' \
       >/dev/null <<<"$output"; then
       printf 'ok %d - allow: %s\n' "$total" "$command_text"
       passed=$((passed + 1))

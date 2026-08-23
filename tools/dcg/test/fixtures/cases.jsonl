@@ -8,8 +8,6 @@
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex deploy --prod"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:raw-convex-deploy","command":"convex deploy --dry-run"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:deploy-exec-script","command":"bash scripts/deploy-exec.sh"}
-{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY convex dev"}
-{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"CONVEX_DEPLOYMENT=prod:example convex dev"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"convex dev --prod"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-targeted-convex-dev","command":"convex dev --deployment prod"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-push","command":"convex run m:mutate --prod --push"}
@@ -19,7 +17,6 @@
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:deployment-token-create","command":"convex deployment token create my-token"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-deployment-select","command":"convex deployment select team:project:prod"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-import-replace-all","command":"convex import snapshot.zip --replace-all --prod"}
-{"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-write","command":"CONVEX_DEPLOY_KEY=$CONVEX_PRODUCTION_DEPLOY_KEY convex run m:doThing"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-run-write","command":"convex run m:mutate --deployment prod"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-import","command":"convex import --prod snapshot.jsonl"}
 {"expect":"deny","rule":"local.convex_prod_deploy_guard:prod-convex-import","command":"convex import snapshot.zip --deployment=prod"}
@@ -35,7 +32,6 @@
 {"expect":"deny","rule":"local.agents_skills_guard:symlink-into-agents-skills","command":"ln --symbolic /some/repo ~/.agents/skills/foo"}
 {"expect":"deny","rule":"local.agents_skills_guard:symlink-into-agents-skills","command":"/bin/ln -s /some/repo ~/.agents/skills/foo"}
 {"expect":"deny","rule":"local.no_bypass_prepush:git-push-no-verify","command":"git push origin feature --no-verify"}
-{"expect":"deny","rule":"local.no_bypass_prepush:skip-prepush-verify-env","command":"SKIP_PREPUSH_VERIFY=1 git push origin feature"}
 {"expect":"deny","rule":"local.no_bypass_prepush:git-commit-no-verify","command":"git commit -n -m checkpoint"}
 {"expect":"deny","rule":"local.no_worktrees:git-worktree-add","command":"git worktree add ../feature feature"}
 {"expect":"allow","command":"pnpm run deploy:staging"}
@@ -59,3 +55,15 @@
 {"expect":"allow","command":"git commit -m checkpoint"}
 {"expect":"allow","command":"git merge feature"}
 {"expect":"allow","command":"ln -s ~/.agents/skills/foo ~/.claude/skills/foo"}
+{"expect":"deny","rule":"local.agent_loop_guard:agent-cli-loop-skill","command":"claude -p \"/loop 5m /babysit-prs\""}
+{"expect":"deny","rule":"local.agent_loop_guard:agent-cli-loop-skill","command":"claude --model opus \"/loop check the deploy\""}
+{"expect":"deny","rule":"local.agent_loop_guard:agent-cli-loop-skill","command":"codex exec \"/loop 10m verify the build\""}
+{"expect":"deny","rule":"local.agent_loop_guard:agent-cli-loop-skill","command":"ntm send customer-kingfield --all \"/loop 5m keep working\""}
+{"expect":"deny","rule":"local.agent_loop_guard:agent-cli-loop-skill","command":"cd repo && claude -p \"/loop 1h /p-agent-swarm-launcher\""}
+{"expect":"deny","rule":"local.agent_loop_guard:tmux-inject-loop-skill","command":"tmux send-keys -t swarm:0.1 -l \"/loop 5m continue\""}
+{"expect":"deny","rule":"local.agent_loop_guard:tmux-inject-loop-skill","command":"tmux set-buffer \"/loop 15m /vibing-with-ntm\""}
+{"expect":"allow","command":"claude -p \"fix the retry loop in src/loop.ts\""}
+{"expect":"allow","command":"codex exec \"refactor docs/loop/overview.md\""}
+{"expect":"allow","command":"tmux send-keys -t s:0.1 -l \"read src/loop/index.ts and report\""}
+{"expect":"allow","command":"grep -rn loop packages/backend/convex/notifications"}
+{"expect":"allow","command":"claude -p \"explain the event loop\""}

@@ -1,6 +1,6 @@
 # tools/dcg profile: full
 #
-# Ryan's complete pack set — every domain pack plus all five local.* guards.
+# Ryan's complete pack set — every domain pack plus all six local.* guards.
 # This is the default profile and mirrors the enabled set on his machines.
 #
 # Profile schema v1 permits EXACTLY these keys: schema_version, name,
@@ -10,7 +10,7 @@
 # installer ensures DCG's conventional glob (~/.config/dcg/packs/*.yaml).
 #
 # SAFETY INVARIANT (enforced by install.sh, structurally): every profile must
-# contain `core` plus all five `local.*` guards. Profiles scope which DOMAIN
+# contain `core` plus all six `local.*` guards. Profiles scope which DOMAIN
 # packs load; they are never a way to reduce safety. A profile that omits a
 # guard fails the install, not just review.
 #
@@ -46,4 +46,5 @@ enabled = [
   "local.convex_prod_deploy_guard",
   "local.no_bypass_prepush",
   "local.no_worktrees",
+  "local.agent_loop_guard",
 ]

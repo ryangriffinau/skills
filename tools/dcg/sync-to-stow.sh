@@ -49,6 +49,7 @@ REQUIRED_GUARDS=(
   local.convex_prod_deploy_guard
   local.no_bypass_prepush
   local.no_worktrees
+  local.agent_loop_guard
 )
 
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
