@@ -1,9 +1,9 @@
 ---
 name: joint-design-review
 status: drafting
-version: 0.2.0
+version: 0.2.1
 tags: [design, frontend, audit, ux, beads]
-updated: 2026-08-09
+updated: 2026-09-14
 description: >-
   Joint design review of one product area: audit against the loaded design bar, split
   findings into standing-approved fixes vs decisions that need the user's ruling, bead
@@ -42,6 +42,10 @@ which are contended, and propose an order with a one-line recommendation.
 Read the repo's `AGENTS.md`, docs entrypoint, and design-system doc first. The repo's
 own contracts always win over the generic bar, and a repo-declared frontend skill order
 is used verbatim.
+
+When the repo has no `DESIGN.md`, no design-system doc, and no frontend rules in
+`AGENTS.md`, load [references/default-bar.md](references/default-bar.md) as the bar
+before reading a component. Name it in the report's "bar loaded" line.
 
 Otherwise detect the stack from `package.json` and load skills **at the step that uses
 them**, one rule-set in focus at a time. Staged loading is not about tokens: seven
