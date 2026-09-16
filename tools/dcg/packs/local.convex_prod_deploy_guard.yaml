@@ -1,6 +1,6 @@
 id: local.convex_prod_deploy_guard
 name: Convex Production Deploy Ban
-version: 3.4.0
+version: 3.5.0
 description: >
   Command-gated guard for agent-side Convex PRODUCTION access (Ryan, 2026-07-19,
   refined v3.1 after two gpt-5.6-sol review rounds). Root cause of the 2026-07-19
@@ -63,6 +63,33 @@ description: >
   literal `prod` keyword; everything else is fail-open by construction. This is
   the ceiling on any regex guard here and is precisely why the operational
   invariant (agents hold no prod deploy credential) is the real control.
+
+  v3.5 (2026-09-16) — make prod READS frictionless without loosening writes:
+  1. Sanctioned query runner: `bun run prod:query <fn> '{...}'` in the customer
+     repos (tooling/scripts/convex-prod-query.ts). It only POSTs to the
+     deployment's /api/query endpoint, which the Convex server restricts to
+     query functions ("Trying to execute X as Query, but it is defined as
+     Mutation" — verified 2026-09-16 on a dev deployment, with and without an
+     admin key) and which has no code-push path. safe_patterns carve it out
+     explicitly; it would pass anyway because it never spells `convex run`.
+  2. The credential invariant is now enforceable: Convex issues SCOPED access
+     tokens (deployment:data:view, logs:view, env:view,
+     functions:runInternalQueries, runTestQuery — and NOT deployment:deploy /
+     data:write / env:write / runInternalMutations). Agent-readable .env files
+     carry that token as CONVEX_PROD_READ_KEY; the full production deploy key
+     lives in CI secrets only. With that swap, the regex below is genuinely
+     defense in depth again rather than the only barrier.
+  3. `convex <verb> --help` / `-h` is carved out (help prints and exits). The
+     safe pattern must cover the destructive span, so `deploy --help; deploy
+     --prod` still denies on the second segment (robot-mode tested).
+  Unchanged: prod-targeted `convex run` stays confirm-tier (query vs mutation
+  undecidable from the string) — its message now points at prod:query.
+  KNOWN GAP (found 2026-09-16, pre-existing since v3.x): dcg strips a leading
+  `VAR=value cmd` / `env VAR=value cmd` prefix before matching, so the inline
+  key branch (`CONVEX_DEPLOY_KEY=prod:... bunx convex run|dev|import`) never
+  fires at the START of a command — only mid-line (`cd x && KEY=... convex
+  run`). No config option changes this. It is one more reason the scoped read
+  token must be the only prod credential in agent-readable .env files.
 keywords:
   - convex
   - deploy:prod
@@ -210,9 +237,13 @@ destructive_patterns:
       gated (no safe exception that can't mask the --push hard block).
     message: >
       Confirm required: prod-targeted `convex run` may WRITE production data
-      (query vs mutation is indistinguishable). Read-only? Approve once with
-      `dcg allow-once <code>` or have Ryan run it. Read-only prod introspection
-      via `convex data` / `convex logs` / `convex env get` needs no prompt.
+      (query vs mutation is indistinguishable). Running a QUERY? Use the
+      sanctioned read-only runner instead, no prompt:
+      `bun run prod:query <module:function> '{"arg":...}'`
+      (`--list <substring>` to find query names; `--dev` for the same call
+      against dev). It cannot execute mutations or push code. Genuine prod
+      WRITE? Approve once with `dcg allow-once <code>` or have Ryan run it.
+      `convex data` / `logs` / `env get` / `function-spec` --prod need no prompt.
   - name: prod-convex-import
     description: prod-targeted `convex import` (bulk data write)
     pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+import\b|convex\s+import\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
@@ -258,4 +289,19 @@ destructive_patterns:
     message: >
       Confirm required: deleting a Convex access token can break CI's deploy
       path. Approve once with `dcg allow-once <code>` or have Ryan run it.
-safe_patterns: []
+safe_patterns:
+  - name: prod-query-wrapper
+    description: repo read-only query runner (tooling/scripts/convex-prod-query.ts, `bun run prod:query`)
+    pattern: 'convex-prod-query(?:\.ts)?\b'
+    explanation: >
+      The wrapper only POSTs to /api/query; the Convex server refuses to run
+      mutations/actions there and the endpoint cannot push code. Explicit
+      carve-out so the intent is visible; a chained raw `convex deploy` or
+      `convex run --push` in the same command still denies (tested).
+  - name: convex-help-only
+    description: convex <verb> --help / -h prints help text and exits
+    pattern: 'convex\s+[\w:\s-]*\s(?:-h|--help)(?:\s|$)'
+    explanation: >
+      Reading CLI help for a blocked verb (deploy, deployment token create) is
+      not an execution. The safe span must cover the destructive match, so
+      `deploy --help; deploy --prod` still denies on the second segment.
