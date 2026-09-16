@@ -54,8 +54,11 @@ printf '1..7\n'
 output="$("$DCG_DIR/install.sh" --profile full)"
 assert_contains "$output" "installation complete"
 [[ -f "$CONFIG" ]] || fail "fresh install did not create config.toml"
-[[ "$(find "$PACK_DIR" -type f -name 'local.*.yaml' | wc -l | tr -d ' ')" == "5" ]] \
-  || fail "fresh install did not copy all five local packs"
+# Derived from the source tree, not hardcoded: adding a guard must not break this.
+expected_packs="$(find "$DCG_DIR/packs" -type f -name 'local.*.yaml' | wc -l | tr -d ' ')"
+installed_packs="$(find "$PACK_DIR" -type f -name 'local.*.yaml' | wc -l | tr -d ' ')"
+[[ "$installed_packs" == "$expected_packs" ]] \
+  || fail "fresh install copied $installed_packs local packs, expected $expected_packs"
 python3 - "$CONFIG" "$DCG_DIR/profiles/full.toml" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
