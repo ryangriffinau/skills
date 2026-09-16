@@ -120,6 +120,28 @@ Every profile must include `core` and all local safety guards:
 `sync-to-stow.sh` parses TOML structurally and fails if this invariant is broken. Profiles scope
 domain packs; they are never a weaker safety tier.
 
+## Packs that pair with a skill
+
+`local.convex_prod_deploy_guard` (3.5.0+) is one half of a pair. It confirms every prod-targeted
+`convex run`, because a query is indistinguishable from a mutation on the command line, and its
+message sends the agent to the `convex-prod-query` CLI instead. That CLI ships in the
+`convex-prod-query` skill (`skills/engineering/convex-prod-query`), which bundles a copy of this
+pack and installs it, so a machine cannot end up with one half and not the other:
+
+```bash
+npx skills@latest add ryangriffinau/skills --skill convex-prod-query -g -y
+bash ~/.agents/skills/convex-prod-query/scripts/install.sh
+```
+
+This directory stays the source of truth for the pack. Edit `packs/local.convex_prod_deploy_guard.yaml`
+here, then copy it into the skill's `dcg/` directory; the skill's `tests/dcg-pack-sync.test.sh`
+fails while they differ, and CI runs it. The same applies to `lib/merge-config.py`, which the skill
+bundles so its installer can union one pack into `[packs].enabled` without rewriting foreign config.
+
+The skill's installer is deliberately single-pack and refuses to write through a symlink. On a
+stow-managed machine, use `sync-to-stow.sh` as usual; on a teammate's machine, `install.sh` here
+remains the way to get the full pack set.
+
 ## Add or change a rule
 
 1. Add or edit `packs/<id>.yaml`. Keep the filename equal to the pack `id`, bump its semver, and put

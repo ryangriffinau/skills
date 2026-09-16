@@ -67,3 +67,15 @@
 {"expect":"allow","command":"tmux send-keys -t s:0.1 -l \"read src/loop/index.ts and report\""}
 {"expect":"allow","command":"grep -rn loop packages/backend/convex/notifications"}
 {"expect":"allow","command":"claude -p \"explain the event loop\""}
+{"expect": "allow", "command": "bun run prod:query qualityFindingMassClose:preview '{\"cursor\":null}'"}
+{"expect": "allow", "command": "convex-prod-query --list users"}
+{"expect": "allow", "command": "bun run tooling/scripts/convex-prod-query.ts users:get '{}'"}
+{"expect": "deny", "rule": "local.convex_prod_deploy_guard:raw-convex-deploy", "command": "convex-prod-query x && bunx convex deploy --prod"}
+{"expect": "deny", "rule": "local.convex_prod_deploy_guard:prod-convex-run-push", "command": "convex-prod-query x && bunx convex run f --push --prod"}
+{"expect": "allow", "command": "bunx convex deploy --help"}
+{"expect": "allow", "command": "bunx convex deploy -h"}
+{"expect": "allow", "command": "bunx convex deployment token create --help"}
+{"expect": "allow", "command": "bunx convex run --prod --help"}
+{"expect": "deny", "rule": "local.convex_prod_deploy_guard:raw-convex-deploy", "command": "bunx convex deploy --help; bunx convex deploy --prod"}
+{"expect": "deny", "rule": "local.convex_prod_deploy_guard:raw-convex-deploy", "command": "bunx convex deploy --help-me"}
+{"expect": "deny", "rule": "local.convex_prod_deploy_guard:deployment-token-create", "command": "bunx convex deployment token create agent-key"}

@@ -12,3 +12,6 @@ node_modules/
 .agents/
 .ntm/
 skills-lock.json
+
+# Claude Code per-machine local settings (settings.json is the shared one)
+.claude/settings.local.json
