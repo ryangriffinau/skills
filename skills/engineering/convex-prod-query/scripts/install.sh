@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # install.sh — wire the convex-prod-query tool into this machine.
 #
+# The tool and the dcg pack local.convex_prod_deploy_guard are a PAIR: the pack
+# gates prod-targeted `convex run` and points agents at this tool, and the tool
+# is what makes that gate liveable. This installer therefore ships both, so a
+# machine can never end up with one and not the other.
+#
 # Idempotent. Run it after `npx skills add ryangriffinau/skills --skill convex-prod-query`
 # (or from a checkout of the skills repo). It:
 #   1. checks bun is available (the tool is a Bun script);
@@ -10,29 +15,40 @@
 #   3. adds Claude Code `permissions.deny` Edit rules so agents cannot rewrite the
 #      tool, the shim, or the dcg configuration through the file tools
 #      (Codex is covered by its workspace-write sandbox);
-#   4. checks the dcg pack local.convex_prod_deploy_guard is v3.5.0+ (the version
-#      that carves the tool out and points agents at it) and prints the fix if not.
+#   4. installs the bundled dcg pack (dcg/local.convex_prod_deploy_guard.yaml) into
+#      the user pack dir and unions it into [packs].enabled, additively. It never
+#      replaces a symlinked pack or config — those are stow-managed and belong to
+#      the dotfiles repo — and reports the sync command instead.
 #
-# Usage: install.sh [--check] [--dry-run] [--no-protect-dcg] [--bin-dir DIR]
-#   --check           verify only; exit non-zero on any gap (doctor mode)
-#   --dry-run         print planned writes without performing them
-#   --no-protect-dcg  skip the deny rules for ~/.config/dcg and the dotfiles copy
-#   --bin-dir DIR     shim location (default ~/.local/bin)
+# tools/dcg in this repo remains the source of truth for pack content and the
+# multi-pack installer; tests/dcg-pack-sync.test.sh fails if the bundled copies drift.
+#
+# Usage: install.sh [--check] [--dry-run] [--no-protect-dcg] [--no-install-pack] [--bin-dir DIR]
+#   --check            verify only; exit non-zero on any gap (doctor mode)
+#   --dry-run          print planned writes without performing them
+#   --no-protect-dcg   skip the deny rules for ~/.config/dcg and the dotfiles copy
+#   --no-install-pack  skip installing/enabling the companion dcg pack
+#   --bin-dir DIR      shim location (default ~/.local/bin)
 
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOL="$SKILL_DIR/scripts/convex-prod-query"
+BUNDLED_PACK="$SKILL_DIR/dcg/local.convex_prod_deploy_guard.yaml"
+MERGE_CONFIG="$SKILL_DIR/dcg/merge-config.py"
 BIN_DIR="${HOME}/.local/bin"
 SHIM_NAME="convex-prod-query"
 CLAUDE_SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
-DCG_PACK="${DCG_PACK:-$HOME/.config/dcg/packs/local.convex_prod_deploy_guard.yaml}"
+DEFAULT_DCG_CONFIG="$HOME/.config/dcg/config.toml"
+DCG_CONFIG_FILE="${DCG_CONFIG_FILE:-$DEFAULT_DCG_CONFIG}"
+PACK_ID="local.convex_prod_deploy_guard"
 REQUIRED_PACK_VERSION="3.5.0"
 INSTALL_CMD="npx skills@latest add ryangriffinau/skills --skill convex-prod-query -g -y"
 
 CHECK_ONLY=0
 DRY_RUN=0
 PROTECT_DCG=1
+INSTALL_PACK=1
 failures=0
 
 ok()   { printf 'OK   %s\n' "$*"; }
@@ -40,13 +56,14 @@ gap()  { printf 'GAP  %s\n' "$*"; failures=$((failures + 1)); }
 act()  { printf 'DO   %s\n' "$*"; }
 die()  { printf 'install.sh: error: %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-protect-dcg) PROTECT_DCG=0; shift ;;
+    --no-install-pack) INSTALL_PACK=0; shift ;;
     --bin-dir) BIN_DIR="${2:?--bin-dir requires a path}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -54,6 +71,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 writes_allowed() { [[ "$CHECK_ONLY" -eq 0 && "$DRY_RUN" -eq 0 ]]; }
+planned() { [[ "$CHECK_ONLY" -eq 1 ]] && failures=$((failures + 1)); return 0; }
+version_ge() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" == "$2" ]]; }
+# Tolerant of a missing file: callers treat an empty version as "not installed".
+pack_version() {
+  [[ -f "$1" ]] || return 0
+  sed -n 's/^version:[[:space:]]*//p' "$1" 2>/dev/null | head -1 || true
+}
 
 # --- 1. runtime ---------------------------------------------------------------
 if command -v bun >/dev/null 2>&1; then
@@ -107,7 +131,7 @@ else
     ok "shim written: $SHIM"
   else
     act "write shim $SHIM (exec bun \$HOME/.agents/skills/convex-prod-query/scripts/convex-prod-query)"
-    [[ "$CHECK_ONLY" -eq 1 ]] && failures=$((failures + 1))
+    planned
   fi
 fi
 
@@ -173,24 +197,101 @@ PY
   else
     act "add to $CLAUDE_SETTINGS permissions.deny:"
     printf '       %s\n' $missing
-    [[ "$CHECK_ONLY" -eq 1 ]] && failures=$((failures + 1))
+    planned
   fi
 else
   gap "python3 missing — cannot merge Claude Code deny rules (add them by hand: ${rules[*]})"
 fi
 
-# --- 4. dcg pack currency -------------------------------------------------------
-version_ge() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" == "$2" ]]; }
-if ! command -v dcg >/dev/null 2>&1; then
-  gap "dcg not installed — the tool works without it, but the guard that points agents at it is missing (https://github.com/Dicklesworthstone/destructive_command_guard)"
-elif [[ ! -f "$DCG_PACK" ]]; then
-  gap "dcg pack local.convex_prod_deploy_guard not installed — install Ryan's packs: ryangriffinau/skills tools/dcg/install.sh (teammates) or ./dot link (dotfiles)"
+# --- 4. companion dcg pack ------------------------------------------------------
+# The pack is what makes agents reach for this tool: it confirms prod-targeted
+# `convex run` and names `prod:query` in the message. Installing them together is
+# the point of this section.
+PACK_DIR="$(dirname "$DCG_CONFIG_FILE")/packs"
+LIVE_PACK="$PACK_DIR/$PACK_ID.yaml"
+if [[ "$DCG_CONFIG_FILE" == "$DEFAULT_DCG_CONFIG" ]]; then
+  # DCG expands this conventional user-config glob; keep the literal tilde.
+  # shellcheck disable=SC2088
+  CUSTOM_PATH='~/.config/dcg/packs/*.yaml'
 else
-  pack_version="$(sed -n 's/^version:[[:space:]]*//p' "$DCG_PACK" | head -1)"
-  if version_ge "$pack_version" "$REQUIRED_PACK_VERSION"; then
-    ok "dcg pack local.convex_prod_deploy_guard $pack_version"
+  CUSTOM_PATH="$PACK_DIR/*.yaml"
+fi
+
+pack_enabled() {
+  python3 - "$DCG_CONFIG_FILE" "$PACK_ID" <<'PY' 2>/dev/null
+import os, sys, tomllib
+path, pack = sys.argv[1], sys.argv[2]
+if not os.path.exists(path):
+    sys.exit(1)
+with open(path, "rb") as fh:
+    data = tomllib.load(fh)
+sys.exit(0 if pack in (data.get("packs", {}).get("enabled") or []) else 1)
+PY
+}
+
+if [[ "$INSTALL_PACK" -eq 0 ]]; then
+  ok "skipping the companion dcg pack (--no-install-pack)"
+elif ! command -v dcg >/dev/null 2>&1; then
+  gap "dcg not installed — the tool works without it, but the guard that points agents at it does not exist. Install DCG: https://github.com/Dicklesworthstone/destructive_command_guard"
+elif [[ ! -f "$BUNDLED_PACK" ]]; then
+  gap "bundled pack missing from the skill: $BUNDLED_PACK (reinstall: $INSTALL_CMD)"
+elif ! dcg pack validate "$BUNDLED_PACK" >/dev/null 2>&1; then
+  gap "this DCG release rejects the bundled pack: dcg pack validate '$BUNDLED_PACK'"
+else
+  bundled_version="$(pack_version "$BUNDLED_PACK")"
+  live_version="$(pack_version "$LIVE_PACK")"
+
+  # 4a. pack file
+  if [[ -L "$LIVE_PACK" ]]; then
+    # stow-managed: the dotfiles repo owns this file. Never write through it.
+    if [[ -n "$live_version" ]] && version_ge "$live_version" "$REQUIRED_PACK_VERSION"; then
+      ok "dcg pack $PACK_ID $live_version (stow-managed symlink)"
+    else
+      gap "dcg pack $PACK_ID is ${live_version:-unreadable} (< $REQUIRED_PACK_VERSION) and stow-managed — update it in the skills repo: tools/dcg/sync-to-stow.sh, then 'cd ~/.dotfiles && stow agents'"
+    fi
+  elif [[ -f "$LIVE_PACK" ]] && [[ -n "$live_version" ]] && version_ge "$live_version" "$bundled_version"; then
+    ok "dcg pack $PACK_ID $live_version"
+  elif writes_allowed; then
+    mkdir -p "$PACK_DIR"
+    cp "$BUNDLED_PACK" "$LIVE_PACK"
+    ok "dcg pack $PACK_ID installed ($bundled_version) -> $LIVE_PACK"
   else
-    gap "dcg pack local.convex_prod_deploy_guard is $pack_version (< $REQUIRED_PACK_VERSION) — update from ryangriffinau/skills tools/dcg"
+    act "install dcg pack $PACK_ID $bundled_version -> $LIVE_PACK"
+    planned
+  fi
+
+  # 4b. enabled list
+  if pack_enabled; then
+    ok "dcg pack $PACK_ID is enabled in $DCG_CONFIG_FILE"
+  elif [[ -L "$DCG_CONFIG_FILE" ]]; then
+    gap "$DCG_CONFIG_FILE is a stow symlink — add \"$PACK_ID\" to [packs].enabled in the dotfiles copy, then 'cd ~/.dotfiles && stow agents'"
+  elif [[ ! -f "$MERGE_CONFIG" ]]; then
+    gap "config merge helper missing: $MERGE_CONFIG (reinstall: $INSTALL_CMD)"
+  elif writes_allowed; then
+    work_dir="$(mktemp -d "${TMPDIR:-/tmp}/convex-prod-query-install.XXXXXX")"
+    candidate="$work_dir/config.toml"
+    if ! python3 "$MERGE_CONFIG" "$DCG_CONFIG_FILE" "$candidate" \
+         --custom-path "$CUSTOM_PATH" --enabled core --enabled "$PACK_ID"; then
+      rm -rf "$work_dir"
+      die "could not merge $DCG_CONFIG_FILE"
+    fi
+    # Prove this DCG release accepts the candidate before activating it.
+    if ! DCG_CONFIG="$candidate" dcg config --format json >/dev/null 2>&1; then
+      rm -rf "$work_dir"
+      die "DCG rejected the merged config; $DCG_CONFIG_FILE left untouched"
+    fi
+    mkdir -p "$(dirname "$DCG_CONFIG_FILE")"
+    if [[ -f "$DCG_CONFIG_FILE" ]]; then
+      backup="$DCG_CONFIG_FILE.bak.$(date +%Y%m%d%H%M%S)"
+      cp "$DCG_CONFIG_FILE" "$backup"
+      ok "backed up $DCG_CONFIG_FILE -> $backup"
+    fi
+    cp "$candidate" "$DCG_CONFIG_FILE"
+    rm -rf "$work_dir"
+    ok "enabled $PACK_ID in $DCG_CONFIG_FILE (existing packs preserved)"
+  else
+    act "enable $PACK_ID in $DCG_CONFIG_FILE ([packs].enabled, additive)"
+    planned
   fi
 fi
 

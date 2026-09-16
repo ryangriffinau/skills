@@ -58,7 +58,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.2 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
 | [flywheel-conductor](skills/engineering/flywheel-conductor) | ⚪ | 0.1.0 | agents, flywheel, swarm | Drive a flywheel swarm from your own agent session — poll → triage → act → journal, with a 13-guard playbook |
 | [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.3.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
-| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.1.0 | convex, production, verification, dcg | Read prod Convex state with a query-only tool + installer (shim, Claude deny rules, dcg pack check) |
+| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.2.0 | convex, production, verification, dcg | Read prod Convex state with a query-only tool + installer that also ships the dcg pack it pairs with |
 
 > Drafting skills (`commit`, `pr-closeout`, `goal-plan`, `stale-work-audit`, `add-prompt`, `flywheel-local-launcher`, `flywheel-conductor`) are still being generalized or battle-tested. Skills with repo-specific behavior should keep it behind a local init/profile rather than hard-code one project workflow.
 
