@@ -1,6 +1,6 @@
 id: local.convex_prod_deploy_guard
 name: Convex Production Deploy Ban
-version: 3.5.0
+version: 3.5.1
 description: >
   Command-gated guard for agent-side Convex PRODUCTION access (Ryan, 2026-07-19,
   refined v3.1 after two gpt-5.6-sol review rounds). Root cause of the 2026-07-19
@@ -65,13 +65,21 @@ description: >
   invariant (agents hold no prod deploy credential) is the real control.
 
   v3.5 (2026-09-16) — make prod READS frictionless without loosening writes:
-  1. Sanctioned query runner: `bun run prod:query <fn> '{...}'` in the customer
-     repos (tooling/scripts/convex-prod-query.ts). It only POSTs to the
-     deployment's /api/query endpoint, which the Convex server restricts to
-     query functions ("Trying to execute X as Query, but it is defined as
-     Mutation" — verified 2026-09-16 on a dev deployment, with and without an
-     admin key) and which has no code-push path. safe_patterns carve it out
-     explicitly; it would pass anyway because it never spells `convex run`.
+  1. Sanctioned query runner: the `convex-prod-query` CLI, shipped by the skill
+     of the same name in ryangriffinau/skills (template repos alias it as
+     `bun run prod:query <fn> '{...}'`). THIS PACK AND THAT SKILL ARE A PAIR:
+     the pack confirms prod-targeted `convex run` and names the tool in the
+     message, and the tool is what makes that gate liveable. The skill bundles
+     this pack and its installer installs it, so a machine cannot end up with
+     one and not the other:
+         npx skills@latest add ryangriffinau/skills --skill convex-prod-query -g -y
+         bash ~/.agents/skills/convex-prod-query/scripts/install.sh
+     The tool only POSTs to the deployment's /api/query endpoint, which the
+     Convex server restricts to query functions ("Trying to execute X as Query,
+     but it is defined as Mutation" — verified 2026-09-16 on a dev deployment,
+     with and without an admin key) and which has no code-push path.
+     safe_patterns carve it out explicitly; it would pass anyway because it
+     never spells `convex run`.
   2. The credential invariant is now enforceable: Convex issues SCOPED access
      tokens (deployment:data:view, logs:view, env:view,
      functions:runInternalQueries, runTestQuery — and NOT deployment:deploy /
@@ -239,11 +247,13 @@ destructive_patterns:
       Confirm required: prod-targeted `convex run` may WRITE production data
       (query vs mutation is indistinguishable). Running a QUERY? Use the
       sanctioned read-only runner instead, no prompt:
-      `bun run prod:query <module:function> '{"arg":...}'`
-      (`--list <substring>` to find query names; `--dev` for the same call
-      against dev). It cannot execute mutations or push code. Genuine prod
-      WRITE? Approve once with `dcg allow-once <code>` or have Ryan run it.
-      `convex data` / `logs` / `env get` / `function-spec` --prod need no prompt.
+      `convex-prod-query <module:function> '{"arg":...}'` (aliased as
+      `bun run prod:query` in template repos; `--list <substring>` to find query
+      names; `--dev` for the same call against dev). It cannot execute mutations
+      or push code. Not installed? `npx skills@latest add ryangriffinau/skills
+      --skill convex-prod-query -g -y`. Genuine prod WRITE? Approve once with
+      `dcg allow-once <code>` or have Ryan run it. `convex data` / `logs` /
+      `env get` / `function-spec` --prod need no prompt.
   - name: prod-convex-import
     description: prod-targeted `convex import` (bulk data write)
     pattern: '(?:(?:CONVEX_PRODUCTION_DEPLOY_KEY|CONVEX_DEPLOY_KEY=["'']?prod:|CONVEX_DEPLOYMENT=["'']?prod:)[^|;&]*convex\s+import\b|convex\s+import\b[^|;&]*(?:--prod(?:\s|$|[|;&])|--deployment(?:=|\s+)["'']?(?:[\w.-]+:){0,2}prod["'']?(?:\s|$|[|;&])))'
@@ -291,13 +301,15 @@ destructive_patterns:
       path. Approve once with `dcg allow-once <code>` or have Ryan run it.
 safe_patterns:
   - name: prod-query-wrapper
-    description: repo read-only query runner (tooling/scripts/convex-prod-query.ts, `bun run prod:query`)
+    description: read-only query runner from the convex-prod-query skill (aliased as `bun run prod:query`)
     pattern: 'convex-prod-query(?:\.ts)?\b'
     explanation: >
-      The wrapper only POSTs to /api/query; the Convex server refuses to run
+      The runner only POSTs to /api/query; the Convex server refuses to run
       mutations/actions there and the endpoint cannot push code. Explicit
       carve-out so the intent is visible; a chained raw `convex deploy` or
-      `convex run --push` in the same command still denies (tested).
+      `convex run --push` in the same command still denies (tested). The `.ts`
+      alternate matches legacy repo-local copies (tooling/scripts/
+      convex-prod-query.ts) that predate the skill.
   - name: convex-help-only
     description: convex <verb> --help / -h prints help text and exits
     pattern: 'convex\s+[\w:\s-]*\s(?:-h|--help)(?:\s|$)'
