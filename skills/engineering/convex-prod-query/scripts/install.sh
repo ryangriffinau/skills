@@ -295,6 +295,35 @@ else
   fi
 fi
 
+# --- 5. Codex sandbox network -----------------------------------------------------
+# Codex runs commands under a seatbelt sandbox that blocks network egress by
+# default in workspace-write mode, so the tool's HTTPS call to *.convex.cloud
+# fails there and every prod read costs an approval prompt. The fix is one
+# config key. This step only reports; config.toml is personal and never written.
+CODEX_CONFIG="${CODEX_CONFIG:-$HOME/.codex/config.toml}"
+if [[ ! -f "$CODEX_CONFIG" ]]; then
+  ok "Codex not configured on this machine (no $CODEX_CONFIG); skipping its sandbox check"
+elif ! command -v python3 >/dev/null 2>&1; then
+  gap "python3 missing — cannot read $CODEX_CONFIG; ensure [sandbox_workspace_write] network_access = true"
+else
+  codex_net="$(python3 - "$CODEX_CONFIG" <<'PY' 2>/dev/null || echo unreadable
+import sys, tomllib
+with open(sys.argv[1], "rb") as fh:
+    d = tomllib.load(fh)
+mode = d.get("sandbox_mode", "")
+net = (d.get("sandbox_workspace_write") or {}).get("network_access", False)
+print(f"{mode}:{'on' if net else 'off'}")
+PY
+)"
+  case "$codex_net" in
+    workspace-write:on|danger-full-access:*) ok "Codex sandbox allows network egress ($codex_net)" ;;
+    unreadable) gap "$CODEX_CONFIG is not valid TOML; fix it, then rerun" ;;
+    *) gap "Codex sandbox blocks network egress ($codex_net), so convex-prod-query cannot reach *.convex.cloud from a Codex session without an approval each time. Add to $CODEX_CONFIG:
+       [sandbox_workspace_write]
+       network_access = true" ;;
+  esac
+fi
+
 # --- summary ----------------------------------------------------------------------
 if ((failures > 0)); then
   printf '\n%d gap(s). Install the skill with: %s\n' "$failures" "$INSTALL_CMD"

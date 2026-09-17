@@ -1,9 +1,9 @@
 ---
 name: convex-prod-query
 status: drafting
-version: 0.2.0
+version: 0.3.0
 tags: [convex, production, verification, dcg, tooling]
-updated: 2026-09-16
+updated: 2026-09-17
 description: "Read production Convex state from an agent session without approval prompts and without any way to write or deploy. Use when verifying work is complete on prod, checking prod data or function results, comparing dev vs prod, or when dcg blocks `convex run ... --prod` for something that is only a query. Ships the `convex-prod-query` CLI (query-only by construction) plus an installer that wires the shim, Claude Code deny rules, and the companion dcg pack it pairs with."
 ---
 
@@ -62,6 +62,26 @@ Per repo, once:
 2. Put it in the repo's root `.env` as `CONVEX_PROD_READ_KEY=prod:<deployment>|<token>`.
 3. Remove `CONVEX_PRODUCTION_DEPLOY_KEY` from every agent-readable env file. The full deploy key belongs to CI secrets only. If it is still present the tool works but warns on every run.
 
+## Claude Code and Codex
+
+Both agents get the same tool, the same guard, and the same protection, through different mechanisms. Verified 2026-09-17 on Codex CLI 0.153 and Claude Code 2.1.
+
+| Concern | Claude Code | Codex |
+|---|---|---|
+| Finds the skill | `~/.claude/skills/convex-prod-query` symlink, created by `skills add` | Scans `$HOME/.agents/skills` directly, where `skills add` installs the real directory |
+| Sees the confirm message | dcg `PreToolUse` hook in `~/.claude/settings.json` | dcg `PreToolUse` hook in `~/.codex/hooks.json` |
+| Cannot edit the tool, shim, or dcg config | `permissions.deny` Edit rules added by `install.sh` | The workspace-write sandbox refuses writes outside the repo and temp dirs |
+| Can reach `*.convex.cloud` | Yes | Only if the sandbox allows network egress, see below |
+
+Codex's workspace-write sandbox blocks network by default, so the tool fails there with `getaddrinfo ENOTFOUND` and Codex has to ask you to rerun the command outside the sandbox. That is one approval per prod read, which is the friction this skill exists to remove. Enable egress once in `~/.codex/config.toml`:
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+`install.sh --check` reports this as a gap when Codex is configured on the machine and the key is off. It never writes that file; the setting widens network access for every sandboxed Codex command, so it is your decision. With the key on, both the query path and `--list` work inside the sandbox, and the write protection above still holds.
+
 ## What stays gated, on purpose
 
 - `bunx convex run <fn> --prod` remains confirm-tier. A genuine prod write gets a one-time `dcg allow-once` from the human.
@@ -83,6 +103,7 @@ dcg does not gate a browser or Playwright hitting the deployed site. What it gat
 | `X is not a query, so this tool will not run it` | Working as intended. Writes go through `convex run … --prod` plus `dcg allow-once` |
 | dcg still confirms `convex-prod-query` | Pack older than 3.5.0. Rerun `install.sh`, or on a stow machine sync it from `tools/dcg` |
 | `… is a stow symlink` during install | Expected on Ryan's machines. Update the pack in the skills repo and `stow agents`; nothing is written through the link |
+| `request … failed: getaddrinfo ENOTFOUND` inside Codex | The Codex sandbox has no network. Set `[sandbox_workspace_write] network_access = true` (see Claude Code and Codex) |
 
 ## Files
 

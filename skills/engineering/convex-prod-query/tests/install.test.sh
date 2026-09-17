@@ -174,7 +174,26 @@ PY
   echo "ok - bootstraps a missing dcg config"
 fi
 
-# 11. --no-protect-dcg leaves dcg paths out of the deny rules
+# 11. Codex sandbox network advisory: absent config is skipped, off is a gap, on passes
+export CODEX_CONFIG="$HOME/.codex/config.toml"
+OUT="$("$INSTALL" --check --no-install-pack 2>&1)" || true
+assert_contains "$OUT" "Codex not configured" "no codex config is skipped, not a gap"
+mkdir -p "$HOME/.codex"
+printf 'sandbox_mode = "workspace-write"\n' >"$CODEX_CONFIG"
+set +e
+OUT="$("$INSTALL" --check --no-install-pack 2>&1)"; RC=$?
+set -e
+[[ "$RC" -ne 0 ]] || fail "codex network off should be a gap"
+assert_contains "$OUT" "Codex sandbox blocks network egress" "codex network-off gap reported"
+assert_contains "$OUT" "network_access = true" "codex remediation snippet printed"
+printf 'sandbox_mode = "workspace-write"\n[sandbox_workspace_write]\nnetwork_access = true\n' >"$CODEX_CONFIG"
+OUT="$("$INSTALL" --check --no-install-pack 2>&1)" || fail "codex network on should pass: $OUT"
+assert_contains "$OUT" "Codex sandbox allows network egress" "codex network-on accepted"
+[[ "$(cksum <"$CODEX_CONFIG")" == "$(printf 'sandbox_mode = "workspace-write"\n[sandbox_workspace_write]\nnetwork_access = true\n' | cksum)" ]] \
+  || fail "installer must never write the Codex config"
+echo "ok - Codex sandbox network advisory"
+
+# 12. --no-protect-dcg leaves dcg paths out of the deny rules
 rm -f "$CLAUDE_SETTINGS"; printf '{}\n' >"$CLAUDE_SETTINGS"
 "$INSTALL" --no-protect-dcg >/dev/null 2>&1 || fail "no-protect install failed"
 python3 - "$CLAUDE_SETTINGS" <<'PY'
