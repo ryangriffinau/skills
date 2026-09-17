@@ -350,6 +350,12 @@ function listFunctions(key: string, filter: string, repoRoot: string): void {
 		status = result.exitCode;
 		stderr = result.stderr.toString();
 		stdout = existsSync(specFile) ? readFileSync(specFile, "utf8") : "";
+	} catch (error) {
+		// e.g. a sandbox that forbids the temp-file write or the spawn itself.
+		fail(
+			`could not run convex function-spec (cwd ${backendDir}, spec file ${specFile}): ${(error as Error).message}`,
+			1,
+		);
 	} finally {
 		if (existsSync(specFile)) {
 			unlinkSync(specFile);
