@@ -55,7 +55,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
-| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.3.2 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
+| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.5.0 | meta, prompts | Create `/p-*` slash-command prompts bridged to Claude Code + Codex |
 | [flywheel-conductor](skills/engineering/flywheel-conductor) | ⚪ | 0.1.0 | agents, flywheel, swarm | Drive a flywheel swarm from your own agent session — poll → triage → act → journal, with a 13-guard playbook |
 | [flywheel-local-launcher](skills/engineering/flywheel-local-launcher) | ⚪ | 0.3.0 | agents, flywheel, setup | Preflight the Agent Flywheel stack, link a repo into NTM's `projects_base`, and run per-repo init |
 | [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.0 | convex, production, verification, dcg | Read prod Convex state with a query-only tool + installer that also ships the dcg pack it pairs with |
@@ -76,6 +76,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-pre-mortem](prompts/p-pre-mortem.md) | 🟢 | Assume it failed — work backwards to the causes |
 | [p-unsummarizable](prompts/p-unsummarizable.md) | 🟢 | Strip writing until no word can be cut without losing an idea |
 | [p-draft-plan](prompts/p-draft-plan.md) † | 🟡 | Draft one extremely detailed implementation plan, to fan out across competing models |
+| [p-planning-workflow-with-handoff](prompts/p-planning-workflow-with-handoff.md) | 🟡 | Draft a comprehensive plan and a context-complete prompt for an independent model |
 | [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Compare competing plans and synthesize a stronger hybrid plan |
 | [p-plan-to-beads](prompts/p-plan-to-beads.md) † | 🟡 | Decompose a finalized plan into a granular Beads graph via the `br` CLI |
 | [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Check whether a project actually has the intended outcome |

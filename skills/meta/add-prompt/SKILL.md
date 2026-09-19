@@ -1,9 +1,9 @@
 ---
 name: add-prompt
 status: drafting
-version: 0.4.0
+version: 0.5.0
 tags: [meta, prompts, tooling]
-updated: 2026-08-08
+updated: 2026-09-19
 description: >
   Create a new reusable slash-command prompt (the /p-* commands) for Claude Code, Codex, and
   similar clients. Use when the user wants to add or save a prompt, make a "/p-" command, turn
@@ -49,8 +49,8 @@ into a slash command", "add to my prompt library".
 5. **Write the real body** into the file (replacing any scaffolded TODO). If the user supplied prompt text, paste that body verbatim: preserve wording, order, line breaks, emphasis, punctuation, and placeholders. Do not tighten, restructure, rename concepts, add missing sections, add `$ARGUMENTS`, or otherwise "improve" the body unless the user explicitly asks for that edit. Only add the required prompt frontmatter around it.
 6. **Verify:** confirm the file resolves through the client's command dir (for the author's layout, `~/.claude/commands` and `~/.codex/prompts`), then tell the user to type `/<name>` (or `/p-<name>` with the prefix).
 7. **Update the prompt index if this repo maintains one:** add the prompt to `README.md` or the relevant index. Default new prompts to refining (`🟡`) unless the user explicitly says they are battle-tested (`🟢`) or another maturity applies.
-8. **Land it on remote `main` — not optional.** Commit the prompt file *and* its index row, then get that commit onto `origin/main`. Report the pushed commit SHA; "created the file" is not a completion claim.
-   - Commit **only** the prompt and index row. The canonical dir is a shared checkout: other prompts, `.beads/`, and spec drafts are frequently dirty and belong to someone else's work. Use `git commit -- <paths>`, never `git add -A`.
+8. **Land it on remote `main` — not optional.** Commit the prompt file *and* its index row, then get that commit onto `origin/main`. Every finalized add-prompt request includes publishing to remote `main`; the library owner has explicitly authorized this as the default workflow. Do not ask for routine push confirmation again unless a higher-priority permission control requires it. Report the pushed commit SHA; "created the file" is not a completion claim.
+   - Commit **only** the prompt and index row, plus any skill changes explicitly requested as part of the same task. The canonical dir is a shared checkout: other prompts, `.beads/`, and spec drafts are frequently dirty and belong to someone else's work. Use `git commit -- <paths>`, never `git add -A`.
    - The checkout is usually parked on an unrelated feature branch that is many commits ahead of `main`. Do **not** push that branch to `main`, and do not `git checkout` (it will collide with in-flight local edits). Build the commit directly on `origin/main` with a temp index and push it:
      ```bash
      export GIT_INDEX_FILE="$(mktemp -u)"; git read-tree origin/main
@@ -61,7 +61,14 @@ into a slash command", "add to my prompt library".
      ```
      Base the README edit on `git show origin/main:README.md`, not the working copy — the branch's README may carry rows that aren't on `main` yet.
    - If the push is rejected (branch protection or a race), fetch and rebuild on the new `origin/main`, or open a PR from a branch cut at `origin/main` and merge it. Never force-push.
-9. **Optional suggestions:** after the prompt is added verbatim and verified, you may offer concise, clearly separate suggestions for accretive improvements. Do not apply them unless the user asks.
+9. **Install globally and verify — required before completion.** Follow the library's current `README.md` install process and `prompts/p-install-agent-skill.md` verification guidance. Every prompt or skill added through this workflow must be available to both Codex and Claude Code, unless the user explicitly requested project scope.
+   - **Prompts:** use the canonical `prompts/` directory and run `~/.agents/bin/prompts-bridge` when available, or safely establish the equivalent directory bridges. Confirm the exact new filename resolves through both `~/.codex/prompts/` and `~/.claude/commands/` to the canonical file. Compare complete file hashes and verify the body against the user's verbatim source. A prompt is not a `SKILL.md` package; do not pass a plain prompt to `skills add`.
+   - **Skills:** when a skill was added or changed (including `add-prompt` itself), install that finalized remote version globally through the library's skills CLI process, selecting Codex and Claude Code explicitly. For this library: `npx skills add ryangriffinau/skills --skill <skill-name> --global --agent codex claude-code --yes`. Prefer the existing CLI when available; inspect its help for supported flags. Back up an existing install outside skill discovery directories first, and preserve installer provenance and lock metadata.
+   - Confirm installed `SKILL.md` metadata parses, file counts and SHA-256 hashes match the finalized source, and every requested runtime's discovery directory or bridge resolves to the canonical installation. Preserve unrelated skills and real directories.
+   - Check Codex discovery through `/skills` or `$<skill-name>` and Claude Code through its skill picker after reload when those interfaces are available. If an existing session cannot refresh its catalog, distinguish verified filesystem installation from pending picker verification and give the exact reload/restart action; do not claim to have observed a picker you did not inspect.
+   - Verify the finalized files on `origin/main` match the local source. Report the pushed commit SHA, exact invocation, global install locations, verification results, and any remaining reload action. Do not declare completion if publishing, installation, or an accessible verification check failed.
+
+Optional suggestions may follow only after publishing, installation, and verification. Keep them separate from the verbatim body and do not apply them unless requested.
 
 ## Rules
 
