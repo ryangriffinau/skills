@@ -17,6 +17,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Bun (convex-prod-query tool + tests)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install pinned DCG binary
         shell: bash
         env:
