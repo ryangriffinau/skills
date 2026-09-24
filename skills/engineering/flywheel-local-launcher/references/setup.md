@@ -117,6 +117,28 @@ Do **not** `--force` — that clobbers husky's runner and your lint-staged / typ
 
 Now the Agent Mail lease guard runs **alongside** the repo's own checks. The guard is repo-agnostic (machine-wide Agent Mail + `git rev-parse`). One-off bypass: `AGENT_MAIL_BYPASS=1 git commit …`; advisory mode: `AGENT_MAIL_GUARD_MODE=warn`. Non-husky repos fall back to plain `ntm guards install`.
 
+### Teammates (more than one person on the same beads ledger)
+`.beads/issues.jsonl` is shared through git; the SQLite DB is a per-clone cache. `setup` adds two
+things so a second person needs no special workflow — beads commit wherever normal work commits:
+
+1. **`.gitattributes`: `.beads/issues.jsonl merge=union`** — git's built-in driver. The ledger is one
+   id-keyed record per line, so two clones adding different beads merge as a clean union (also under
+   `git pull --rebase`). No custom driver, nothing to register per clone.
+2. **`scripts/ci/flywheel-ready.sh`** — the ready beads *owned by this clone*. `br` stamps every bead
+   with `source_repo_path`, the canonical path of the clone that created it, so after a pull you can
+   *see* a teammate's beads but your swarm never dispatches them. Root ids are hashes and cannot
+   collide; **child ids (`<parent>.N`) are a per-clone counter and can** — two clones adding a child to
+   the same epic both mint `.1`.
+
+What happens on a real collision: the union merge keeps both lines, and `br`'s import guard refuses
+the ledger naming the exact line (`Duplicate issue id '<id>' … at line N`) — fail-loud, never a
+corrupted graph. Builds carrying beads_rust #512 (merged 2026-09-24, unreleased at time of writing)
+repair it with `br sync --merge`, renumbering the later-created issue deterministically so every clone
+converges. On older builds, keep one of the two lines by hand, then `br sync --import-only`.
+
+Fresh clone on `br 0.2.22`: `br init` refuses a `.beads/` that arrived via git; bootstrap the local DB
+with `br doctor --repair && br sync --import-only`.
+
 ### Flywheel Profile
 
 `setup` also scaffolds an optional `.flywheel/profile`: a flat, shell-looking config file that describes repo-specific flywheel behavior. It is parsed by the skill scripts, not sourced. No secrets belong in it.
