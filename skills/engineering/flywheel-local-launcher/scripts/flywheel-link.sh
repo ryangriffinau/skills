@@ -589,6 +589,36 @@ chain_guard_into_hook() {
   fi
 }
 
+beads_merge_attribute_line() {
+  printf '%s\n' '.beads/issues.jsonl merge=union'
+}
+
+# Multi-person beads, part 1: git's built-in `union` merge driver. .beads/issues.jsonl is
+# one id-keyed record per line, so two clones adding different beads merge as a clean
+# union with no custom driver, no per-clone registration and no human input. A genuine
+# same-id collision leaves two lines; br's import guard then refuses with the exact line
+# (fail-loud, never a corrupted graph) and `br sync --merge` repairs it on builds that
+# carry the beads_rust #512 fix.
+ensure_beads_merge_attribute() {
+  local line; line="$(beads_merge_attribute_line)"
+  touch .gitattributes
+  if grep -Fqx "$line" .gitattributes; then
+    echo "  = .gitattributes already merges beads by union"
+  else
+    printf '%s\n' "$line" >> .gitattributes
+    echo "  + .gitattributes: $line"
+  fi
+}
+
+# Multi-person beads, part 2: the clone-owned ready helper. Teammates' beads are visible
+# in this clone after a pull; only beads created in THIS clone are dispatchable here.
+copy_ready_helper() {
+  mkdir -p scripts/ci
+  cp "$SCRIPT_DIR/flywheel-ready.sh" scripts/ci/flywheel-ready.sh
+  chmod +x scripts/ci/flywheel-ready.sh
+  echo "  + scripts/ci/flywheel-ready.sh (ready beads owned by this clone)"
+}
+
 install_guard() {
   # `ntm guards install` wants to OWN the pre-commit hook and fails when husky already has one
   # (it targets .husky/_/pre-commit). On a husky repo, chain the portable lease guard from the
@@ -638,6 +668,8 @@ setup() {
     echo "==> .flywheel/profile"; scaffold_profile
     echo "==> flywheel gitignore"; ensure_flywheel_gitignore_entries
     echo "==> linter ignores"; configure_linter_ignores
+    echo "==> beads union merge"; ensure_beads_merge_attribute
+    echo "==> clone-owned ready helper"; copy_ready_helper
     echo "==> AGENTS.md check"; agents_md_check
   )
   verify "$path"
@@ -656,6 +688,16 @@ verify() {
     check_dir="$path"
   fi
   if [ -d "$check_dir/.beads" ]; then echo "  ✓ beads initialised (.beads/)"; else echo "  ✗ no .beads/ — run: flywheel-link.sh setup"; ok=0; fi
+  if [ -f "$check_dir/.gitattributes" ] && grep -Fqx "$(beads_merge_attribute_line)" "$check_dir/.gitattributes"; then
+    echo "  ✓ beads merge by union (.gitattributes) — teammates' bead commits merge without conflicts"
+  else
+    echo "  ⚠ .gitattributes lacks '$(beads_merge_attribute_line)' — run: flywheel-link.sh setup"
+  fi
+  if [ -x "$check_dir/scripts/ci/flywheel-ready.sh" ]; then
+    echo "  ✓ scripts/ci/flywheel-ready.sh — swarms dispatch only beads created in this clone"
+  else
+    echo "  ⚠ scripts/ci/flywheel-ready.sh missing — run: flywheel-link.sh setup"
+  fi
   n="$(cd "$check_dir" 2>/dev/null && br list 2>/dev/null | grep -cE '\b(task|bug|feature|epic|chore)\b' || true)"
   if [ "${n:-0}" -ge 1 ]; then
     echo "  ✓ ${n} bead(s) present — run 'bv', claim one, close it to prove the loop"

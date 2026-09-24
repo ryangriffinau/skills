@@ -17,8 +17,11 @@ branch — NEVER main, NEVER git worktrees.
 
 **The loop — repeat until `br --db <path> ready` is empty; NEVER stop after one bead:**
 
-1. `br --db <path> ready` → claim the top unblocked bead you can usefully do:
-   `br --db <path> update <id> --status in_progress`.
+1. `scripts/ci/flywheel-ready.sh` → the ready beads **owned by this clone**. Teammates' beads
+   are visible in bare `br ready` after a pull but are never yours to claim (`br` stamps every
+   bead with the clone that created it). Never fall back to bare `br ready` or
+   `bv --robot-triage` for claiming; if the helper is missing, stop and report it. Claim the top
+   bead you can usefully do: `br --db <path> update <id> --status in_progress`.
 2. **Reserve before editing.** Reserve the exact files you will touch via Agent Mail (the
    bead id is the reason).
 3. Pull prior context when it may exist: `cass pack --robot "<topic>"`.
