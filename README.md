@@ -77,7 +77,6 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-draft-plan](prompts/p-draft-plan.md) † | 🟡 | Draft one extremely detailed implementation plan, to fan out across competing models |
 | [p-planning-workflow-with-handoff](prompts/p-planning-workflow-with-handoff.md) | 🟡 | Draft a comprehensive plan and a context-complete prompt for an independent model |
 | [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Compare competing plans and synthesize a stronger hybrid plan |
-| [p-plan-to-beads](prompts/p-plan-to-beads.md) † | 🟡 | Decompose a finalized plan into a granular Beads graph via the `br` CLI |
 | [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Check whether a project actually has the intended outcome |
 | [p-fresh-eyes-review](prompts/p-fresh-eyes-review.md) † | 🟢 | Re-read recent code changes with fresh eyes and fix obvious issues |
 | [p-agent-swarm-launcher](prompts/p-agent-swarm-launcher.md) † | 🟢 | Launch coordinated agent work from repo instructions |
@@ -97,7 +96,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 This collection stands on others' work:
 
 - **Matt Pocock** — the [`skills`](https://github.com/mattpocock/skills) CLI that installs and updates everything here, and the craft of writing high-quality, single-purpose agent skills (his `writing-great-skills` is the reference). I install his skills (`grilling`, `tdd`, `writing-great-skills`, …) globally rather than vendor them into this repo.
-- **Jeffrey Emanuel** — the [Agent Flywheel](https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup) (NTM, Agent Mail, beads, DCG, UBS, CASS). `flywheel-conductor` and `flywheel-local-launcher` are my implementations for driving his flywheel locally, and the planning/execution loop is his: the prompts marked `†` — `p-draft-plan`, `p-synthesize-plans`, `p-plan-to-beads`, `p-reality-check`, `p-fresh-eyes-review`, `p-agent-swarm-launcher`, `p-idea-wizard`, `p-premortem-planner` — are pulled directly from his flywheel / [Jeffrey's Prompts](https://jeffreysprompts.com/).
+- **Jeffrey Emanuel** — the [Agent Flywheel](https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup) (NTM, Agent Mail, beads, DCG, UBS, CASS). `flywheel-conductor` and `flywheel-local-launcher` are my implementations for driving his flywheel locally, and the planning/execution loop is his: the prompts marked `†` — `p-draft-plan`, `p-synthesize-plans`, `p-plan-to-beads` (now deprecated), `p-reality-check`, `p-fresh-eyes-review`, `p-agent-swarm-launcher`, `p-idea-wizard`, `p-premortem-planner` — are pulled directly from his flywheel / [Jeffrey's Prompts](https://jeffreysprompts.com/).
 - **Andrej Karpathy** — `review-council` is based on his LLM Council idea; the peer-review flow and decision ledger are mine.
 
 Everything not attributed above is original. Skills I use but didn't author (Anthropic's, Matt Pocock's, marketing packs) are installed separately and intentionally excluded from this repo.
