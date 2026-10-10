@@ -78,6 +78,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-planning-workflow-with-handoff](prompts/p-planning-workflow-with-handoff.md) | 🟡 | Draft a comprehensive plan and a context-complete prompt for an independent model |
 | [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Compare competing plans and synthesize a stronger hybrid plan |
 | [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Check whether a project actually has the intended outcome |
+| [p-close-the-gaps](prompts/p-close-the-gaps.md) | 🟡 | After a reality check, close the biggest bang-for-the-buck gaps yourself with real agency and no ceremony |
 | [p-fresh-eyes-review](prompts/p-fresh-eyes-review.md) † | 🟢 | Re-read recent code changes with fresh eyes and fix obvious issues |
 | [p-agent-swarm-launcher](prompts/p-agent-swarm-launcher.md) † | 🟢 | Launch coordinated agent work from repo instructions |
 | [p-idea-wizard](prompts/p-idea-wizard.md) † | 🟢 | Generate, evaluate, and implement top project improvement ideas |
