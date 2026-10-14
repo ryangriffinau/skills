@@ -86,7 +86,6 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-draft-plan](prompts/p-draft-plan.md) † | 🟡 | Fallback planning when jsm skills are unavailable; otherwise use `planning-workflow` |
 | [p-planning-workflow-with-handoff](prompts/p-planning-workflow-with-handoff.md) | 🟡 | Draft a comprehensive plan and a context-complete prompt for an independent model |
 | [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Fallback plan synthesis when jsm skills are unavailable; otherwise use `planning-workflow` |
-| [p-plan-to-beads](prompts/p-plan-to-beads.md) † | 🟡 | Decompose a finalized plan into a granular Beads graph via the `br` CLI |
 | [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Fallback project assessment when jsm skills are unavailable; otherwise use `planning-workflow` |
 | [p-close-the-gaps](prompts/p-close-the-gaps.md) | 🟡 | After a reality check, close the biggest bang-for-the-buck gaps yourself with real agency and no ceremony |
 | [p-fresh-eyes-review](prompts/p-fresh-eyes-review.md) † | 🟢 | Re-read recent code changes with fresh eyes and fix obvious issues |

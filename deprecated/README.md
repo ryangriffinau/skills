@@ -15,6 +15,8 @@ Active workflows must not depend on this archive.
 | `p-agent-swarm-launcher` | 2026-10-14 | `p-flywheel-conductor-jsm` and jsm skills | Use the current conductor and native coordination workflow. |
 | `p-install-agent-skill` | 2026-10-14 | Repository README install instructions | Old prompt duplicated installation behavior and obsolete bridges. |
 
+| `prompts/p-plan-to-beads` | 2026-09-28 | `skills/beads-workflow` (`/beads-workflow`) | Plans are encoded with the beads-workflow skill, which carries the dependency, self-containment, and polish rules; the prompt was never the path actually run. |
+
 Renames: `goal-plan` → `write-goal`; `engineering-review` → `codebase-benchmark`;
 `p-pre-mortem` → `p-premortem-general`; `p-premortem-planner` → `p-premortem-spec`.
 These remain active under their new names. The benchmark skill explains how to
