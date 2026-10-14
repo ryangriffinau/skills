@@ -74,8 +74,9 @@ http_headers = { Authorization = "Bearer <token from ~/.local/share/mcp_agent_ma
 projects_base = "/Users/<you>/Code/github"   # see §C
 
 [agents]
-# default Codex reasoning effort = high (see §D)
-codex = "{{if .SystemPromptFile}}CODEX_SYSTEM_PROMPT=\"$(cat {{shellQuote .SystemPromptFile}})\" {{end}}codex --dangerously-bypass-approvals-and-sandbox -m {{shellQuote (.Model | default \"gpt-5.5\")}} -c model_reasoning_effort=high -c model_reasoning_summary_format=experimental --search"
+# defaults: 2 cc panes (Claude Opus 5.5, high) + 1 cod pane (GPT-6 Astra, medium), unless otherwise specified (see §D)
+claude = "claude --model claude-opus-5-5 --effort high --dangerously-skip-permissions"
+codex = "{{if .SystemPromptFile}}CODEX_SYSTEM_PROMPT=\"$(cat {{shellQuote .SystemPromptFile}})\" {{end}}codex --dangerously-bypass-approvals-and-sandbox -m {{shellQuote (.Model | default \"gpt-6-astra\")}} -c model_reasoning_effort=medium -c model_reasoning_summary_format=experimental --search"
 
 [coordinator]
 auto_assign = true   # keep feeding ready beads to idle agents (without this the swarm stalls after the first wave)
@@ -253,6 +254,6 @@ bash <skill>/scripts/flywheel-link.sh list     # see linked projects
 # manual link: ln -s /abs/real/path  ~/Code/github/<flat-name>
 ```
 
-## D. Reasoning effort: default `high`
+## D. Reasoning effort: Claude `high`, Codex `medium`
 
-We default Codex to **`high`** (§A.3), not `xhigh`. Rationale: `high` is far cheaper and avoids the over-reasoning / needless-patching loops `xhigh` tends to fall into on normal web/app work. **Opt into `xhigh` only** for genuinely hard, high-stakes work (large systems, tricky concurrency/algorithms) — per-spawn via the model spec, or a temporary config change. Emanuel runs `xhigh` because his work is heavy systems code; that's his context, not the default here.
+Unless otherwise specified, use **2 cc panes (Claude Opus 5.5, high effort) + 1 cod pane (GPT-6 Astra, medium effort)** (§A.3). Launch cc panes with `claude --model claude-opus-5-5 --effort high --dangerously-skip-permissions` and the cod pane with `codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-astra -c model_reasoning_effort=medium -c model_reasoning_summary_format=experimental --search`.

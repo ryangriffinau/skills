@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# collect-metrics.sh — portable quantitative map for an engineering-review run.
+# collect-metrics.sh — portable quantitative map for a codebase-benchmark run.
 # Emits JSON to stdout. Stack-agnostic; degrades gracefully when a tool is absent.
 # Requires: ripgrep (rg). Optional: git, gh, pnpm.
 #

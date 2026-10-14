@@ -1,13 +1,13 @@
 ---
-name: engineering-review
+name: codebase-benchmark
 status: drafting
-version: 0.1.0
+version: 0.2.0
 tags: [engineering, audit, quality, review, multi-agent]
-updated: 2026-06-25
+updated: 2026-10-14
 description: Run a whole-codebase, longitudinal engineering-practices review that produces a graded trend scorecard (security, architecture, type safety, testing, performance, observability, sprawl, design tokens, a11y, deps, CI/CD, docs) plus per-lens companion findings with file:line evidence and fix contracts, diffed against the prior run for ↑→↓ trend arrows. Use when the user wants a weekly/periodic engineering review, a codebase health scorecard, an architecture-quality audit, or to track engineering practices over time across a project. NOT for reviewing a single PR or diff — use code-review for that.
 ---
 
-# Engineering Review
+# Codebase Benchmark
 
 Produce a repeatable, **longitudinal** scorecard of a codebase's engineering practices. Each run grades a fixed set of lenses, attaches file:line evidence and concrete fix contracts, re-statuses every prior-run finding, and diffs grades against the last run to show whether each area is trending ↑ → ↓.
 
@@ -21,11 +21,19 @@ This is **whole-codebase and over-time**, not per-diff. For reviewing one PR/bra
 - **Trends come from the registry, never from memory.** Read the prior run's grades from the registry, diff, and emit arrows. Do not invent a baseline.
 - **Redaction is a setting.** When the profile sets `redaction: split`, the tracked report carries only the trend scorecard + engineering narrative; security/tenancy/data-access finding detail (vuln class, file:line, repro) goes to the gitignored scratch dir and private issues. See [report-format.md](references/report-format.md#redaction).
 - **Read-only by default.** The review writes only review artifacts (its week dir, the registry, the scratch dir). It does not edit product code, open PRs, or change CI unless the user separately asks.
-- **Keep repo specifics in the profile, not in this skill.** Lens weights, paths, redaction, and tracker live in `.agents/engineering-review/profile.json`.
+- **Keep repo specifics in the profile, not in this skill.** Lens weights, paths, redaction, and tracker live in `.agents/codebase-benchmark/profile.json`.
+
+## Existing installations
+
+This skill was named `engineering-review`. If the new profile is missing, move
+`.agents/engineering-review/profile.json` to `.agents/codebase-benchmark/profile.json`.
+Preserve the profile values, review home, registry, and prior reports. If both
+profiles exist, reconcile their settings before a run. A rename must not reset
+the scorecard history or invent a new baseline.
 
 ## Modes
 
-- `init` — create/update `.agents/engineering-review/profile.json` and the review home (`docs/reviews/` by default). Run once per repo.
+- `init` — create/update `.agents/codebase-benchmark/profile.json` and the review home (`docs/reviews/` by default). Run once per repo.
 - `baseline` — first run with no prior registry entry: grade every lens, write the registry's first row, no trend arrows yet.
 - `quick` — single-pass review (no fan-out, no adversarial verifier). Grounded in `collect-metrics.sh` output + targeted reads. Produces the scorecard + top findings per lens + verdict. Cheapest; upgradeable to `full` later.
 - `full` — the multi-agent run: parallel lens agents → adversarial verifier per finding → prior-finding re-status → scorecard → roadmap. Opt-in (uses the Workflow tool). Use for the authoritative periodic review.
@@ -33,7 +41,7 @@ This is **whole-codebase and over-time**, not per-diff. For reviewing one PR/bra
 
 ## Workflow
 
-1. **Load context.** Read the repo's `AGENTS.md`/`CLAUDE.md`, `docs/adr/**`, `VISION.md`, and the docs index. Load `.agents/engineering-review/profile.json` (run `init` if missing).
+1. **Load context.** Read the repo's `AGENTS.md`/`CLAUDE.md`, `docs/adr/**`, `VISION.md`, and the docs index. Load `.agents/codebase-benchmark/profile.json` (migrate an old profile first; run `init` if neither exists).
 2. **Map the repo (quantitative).** Run [scripts/collect-metrics.sh](scripts/collect-metrics.sh) to get LOC, file-size violations, type-escape-hatch counts, design-token violations, test ratio, Convex index/`.collect()` ratios, dep/catalog signals. This is the measured spine every grade hangs on.
 3. **Pick the lenses.** Default set + per-repo additions from the profile. See [lens-catalog.md](references/lens-catalog.md).
 4. **Run the lenses.**
@@ -54,4 +62,4 @@ The skill is cadence-agnostic. For a recurring weekly run, schedule a cloud agen
 - [grading-and-trends.md](references/grading-and-trends.md) — the A–F± rubric, overall-grade derivation, the registry schema, and the trend mechanic.
 - [report-format.md](references/report-format.md) — `SUMMARY.md` + companion structure, the HTML report, the redaction policy, and the `full`-mode multi-agent methodology.
 - [scripts/collect-metrics.sh](scripts/collect-metrics.sh) — portable metric collector; emits the quantitative map the review grades against.
-- Local profile schema and an example live in the consuming repo at `.agents/engineering-review/profile.json`.
+- Local profile schema and an example live in the consuming repo at `.agents/codebase-benchmark/profile.json`.

@@ -1,13 +1,13 @@
 ---
-name: goal-plan
+name: write-goal
 status: drafting
-version: 0.3.0
+version: 0.4.0
 tags: [planning, goals, agents]
-updated: 2026-06-16
+updated: 2026-10-14
 description: Create crisp, verifiable goal prompts and execution plans for long-running agent work after investigating available context first. Use when the user asks to set, shape, prepare, refine, or plan a goal, mentions /goal or goal mode (if your agent provides one), asks for acceptance criteria, or wants an agent goal that can run for hours or days.
 ---
 
-# Goal Plan
+# Write Goal
 
 Use this skill to turn a fuzzy ambition into a goal the agent can actually finish. The output should be a clear goal statement plus enough operating guidance for execution, measurement, progress tracking, and final review.
 

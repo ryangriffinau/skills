@@ -1,7 +1,14 @@
 ---
-description: Draft one extremely detailed implementation plan (fan out across models)
+description: Draft a detailed plan only when Jeffrey's jsm skills are unavailable; otherwise use planning-workflow.
+use_when: Jeffrey's jsm skills are not installed or usable in this runtime.
 argument-hint: [project/feature brief and goals]
 ---
+
+Use this fallback only when Jeffrey's jsm skills are not installed or usable.
+Check the installed skill files, especially `planning-workflow`, rather than
+only checking for the `jsm` executable. If those skills are available, use
+`planning-workflow` instead. If the installation is incomplete, diagnose it
+before choosing this fallback.
 
 You are producing a single, complete implementation plan for the project or feature described below. This plan will be run independently through several competing frontier models, and the resulting plans will later be merged into one superior hybrid — so make this the strongest possible standalone plan, and do not assume any other context will be available to whoever reads it.
 

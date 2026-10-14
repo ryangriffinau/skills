@@ -9,10 +9,15 @@ skills/<category>/<name>/SKILL.md   # required entrypoint
                         /references/ # optional deep docs
                         /scripts/    # optional tooling
                         /evals/      # optional regression cases
-prompts/p-<name>.md                  # slash-command prompts (separate from skills)
+prompts/p-<name>.md                  # legacy prompt files; native skill migration planned
 ```
 
 Categories are organizational only (`decision`, `planning`, `engineering`, `git`, `web`, `comms`, `meta`). Maturity is **not** a folder — promoting a skill is a one-line frontmatter edit, never a directory move.
+
+The `p-` prefix is a naming convention. Plain prompt files do not enter the
+native Codex skill catalog or normal `skills add` discovery. See the
+[distribution plan](docs/specs/skills-distribution/PLAN.md) for the proposed
+unified format and the current local conductor bridge.
 
 ## Frontmatter schema
 
@@ -52,7 +57,12 @@ This repo is canonical. Consuming repos install from it (e.g. `npx skills add ry
 
 ## Setup and init
 
-Skills in this repo are installed and updated via the `skills` CLI (`npx skills add` / `npx skills update`), which installs to `~/.agents/skills` and auto-symlinks agent dirs. Repo-specific workflow belongs in local config created by an init step, not in the portable skill itself.
+Skills in this repo are installed and updated via the `skills` CLI. Pass
+`--global` explicitly for user-wide installs and select the target agents;
+omitting it selects project scope. Follow the tested version and commands in
+[README.md](README.md). Preserve local changes in the complete package before
+updating. Repo-specific workflow belongs in local config created by an init
+step, not in the portable skill itself.
 
 General repo setup should live in a separate setup skill. That setup skill may discover which installed skills need local config and then call each skill's own init workflow. Individual skills own only their own profile schema, prompts, and validation.
 

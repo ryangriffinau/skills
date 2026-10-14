@@ -1,7 +1,14 @@
 ---
-description: Blend competing plans into a stronger hybrid plan
+description: Synthesize competing plans only when Jeffrey's jsm skills are unavailable; otherwise use planning-workflow.
+use_when: Jeffrey's jsm skills are not installed or usable in this runtime.
 argument-hint: [current plan and competing plans]
 ---
+
+Use this fallback only when Jeffrey's jsm skills are not installed or usable.
+Check the installed skill files, especially `planning-workflow`, rather than
+only checking for the `jsm` executable. If those skills are available, use
+`planning-workflow` instead. If the installation is incomplete, diagnose it
+before choosing this fallback.
 
 You are comparing multiple proposed plans for the same objective, including your own current plan if one exists.
 
