@@ -1,9 +1,9 @@
 ---
 name: write-project-update
 status: refining
-version: 0.10.0
+version: 0.10.1
 tags: [communication, reporting, changelog, stakeholder]
-updated: 2026-08-03
+updated: 2026-10-14
 description: "Write an evidence-grounded project update. Use when the user wants a customer or stakeholder update, public changelog or release note, internal status report, or source-audited summary of shipped work."
 ---
 
