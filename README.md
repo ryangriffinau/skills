@@ -70,7 +70,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 
 ## Prompts
 
-The current checkout stores `p-*` prompts as plain Markdown files. This is a legacy packaging split, not a different kind of workflow. The planned migration will make them standard `SKILL.md` packages while keeping the `p-` names.
+The current checkout stores older `p-*` prompts as plain Markdown files. This is a legacy packaging split, not a different kind of workflow. New `p-*` workflows are standard `SKILL.md` packages under `skills/`; the planned migration will move the older files there while keeping the `p-` names.
 
 Claude Code accepts `/p-<name>` from its commands directory. Codex CLI uses `$<skill-name>` or `/skills`; the desktop app uses its `@` skill picker. The legacy `/prompts:<name>` syntax is not supported by the audited Codex CLI 0.159.3. See [OpenAI's skill docs](https://learn.chatgpt.com/docs/build-skills) and the [version-specific audit](docs/specs/skills-distribution/PLAN.md).
 
@@ -98,6 +98,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-tangible-progress](prompts/p-tangible-progress.md) | 🟢 | Bind a session or swarm to working-software-only progress — no process porn, honest credit |
 | [p-hitl](prompts/p-hitl.md) | 🟡 | Force a complete, paste-ready hand-back of every decision, blocker, and action needing you |
 | [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
+| [p-smarter-beads-wizard](skills/planning/p-smarter-beads-wizard) | 🟡 | Read every bead deeply, then expand and revise the beads with idea-wizard's smartest ideas |
 
 ## Credits
 
