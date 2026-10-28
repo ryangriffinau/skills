@@ -1,0 +1,1485 @@
+#!/usr/bin/env bash
+# caam-seat: run Claude Code and Codex on several caam accounts at the same time.
+#
+# A "seat" is a caam shallow profile (~/orch-homes/<seat>) with its own login.
+# caam owns the seats; this tool names them after caam's vault profiles, makes
+# Claude seats safe on macOS, logs them in, and launches single sessions or
+# whole ntm swarms on them.
+#
+# Why the macOS step exists: caam symlinks ~/Library into every shallow HOME,
+# so `security` still finds the real login Keychain and Claude Code reads the
+# active account's token from it, whatever the seat's own credentials say.
+# caam-seat makes the seat's Library a real directory that links every child
+# except Keychains. Claude Code then falls back to the seat's
+# .claude/.credentials.json, which is the behaviour caam's design assumes.
+# See references/macos-keychain.md.
+#
+# Installed by the caam-seat skill (ryangriffinau/skills). Run `caam-seat help`.
+#
+# Exit codes: 0 ok, 1 failed or gaps found, 2 usage error,
+#             3 missing dependency or setup step, 4 refused: seat not isolated.
+
+set -euo pipefail
+
+VERSION="0.1.0"
+PROG="caam-seat"
+SCHEMA_VERSION=1
+
+E_FAIL=1
+E_USAGE=2
+E_SETUP=3
+E_UNSAFE=4
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+SKILL_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+INSTALL_SH="$SKILL_DIR/scripts/install.sh"
+PLATFORM="${CAAM_SEAT_PLATFORM:-$(uname -s)}"
+NTM_CONFIG_FILE="${NTM_CONFIG:-$HOME/.config/ntm/config.toml}"
+PINS_FILE="${CAAM_SEAT_PINS:-${XDG_CONFIG_HOME:-$HOME/.config}/caam-seat/pins.json}"
+TOOLS="claude codex"
+COMMANDS="status setup add login run spawn launch pin unpin doctor capabilities help version"
+
+# --- output helpers --------------------------------------------------------------
+# stdout carries data (tables, JSON, commands to copy). stderr carries diagnostics.
+
+say() { printf '%s\n' "$*" >&2; }
+
+# die CODE MESSAGE [FIX-LINE...]: print what failed and the exact next command.
+die() {
+  local code="$1" msg="$2"
+  shift 2
+  printf '%s: error: %s\n' "$PROG" "$msg" >&2
+  local line
+  for line in "$@"; do
+    printf '  %s\n' "$line" >&2
+  done
+  exit "$code"
+}
+
+is_tty() {
+  [ -n "${CAAM_SEAT_ASSUME_TTY:-}" ] && return 0
+  [ -t 0 ] && [ -t 1 ]
+}
+
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# --- dependencies ----------------------------------------------------------------
+
+need_jq() {
+  command -v jq >/dev/null 2>&1 ||
+    die "$E_SETUP" "jq is required" "install it: brew install jq (macOS) or apt install jq"
+}
+
+need_caam() {
+  command -v caam >/dev/null 2>&1 ||
+    die "$E_SETUP" "caam is not on PATH" "install it: https://github.com/Dicklesworthstone/coding_agent_account_manager"
+  caam shallow-spawn --help >/dev/null 2>&1 ||
+    die "$E_SETUP" "this caam has no shallow-spawn command" "update it: caam update"
+}
+
+need_deps() {
+  need_jq
+  need_caam
+  load_all
+}
+
+# Run an interactive login with the terminal as stdin, even inside a loop that
+# reads its own input.
+run_interactive() {
+  if [ -t 0 ] || [ -n "${CAAM_SEAT_ASSUME_TTY:-}" ] || [ ! -r /dev/tty ]; then
+    "$@"
+  else
+    "$@" </dev/tty
+  fi
+}
+
+# --- caam data (loaded once per run, in the main shell) -------------------------
+# load_* must run outside pipelines and $(...) so the cache survives; the
+# readers below are then safe to use anywhere.
+
+PROFILES_JSON=""
+SEATS_JSON=""
+
+load_profiles() {
+  [ -n "$PROFILES_JSON" ] && return 0
+  PROFILES_JSON="$(caam ls --json 2>/dev/null)" ||
+    die "$E_FAIL" "caam ls --json failed" "run it directly to see why: caam ls --json"
+}
+
+load_seats() {
+  [ -n "$SEATS_JSON" ] && return 0
+  SEATS_JSON="$(caam shallow-profile list --json 2>/dev/null)" ||
+    die "$E_FAIL" "caam shallow-profile list --json failed" "run it directly to see why: caam shallow-profile list --json"
+}
+
+load_all() {
+  load_profiles
+  load_seats
+}
+
+reload_seats() {
+  SEATS_JSON=""
+  load_seats
+}
+
+profiles_json() { if [ -n "$PROFILES_JSON" ]; then printf '%s' "$PROFILES_JSON"; else printf '{}'; fi; }
+seats_json() { if [ -n "$SEATS_JSON" ]; then printf '%s' "$SEATS_JSON"; else printf '{}'; fi; }
+
+# Vault profiles for claude/codex, minus caam's own _backup_ entries.
+vault_profiles() {
+  profiles_json | jq -c '[.profiles[]? | select((.tool == "claude" or .tool == "codex") and (.system | not))]'
+}
+
+active_email() {
+  profiles_json | jq -r --arg t "$1" '[.profiles[]? | select(.tool == $t and .active)][0].identity.email // empty'
+}
+
+profile_email() {
+  profiles_json | jq -r --arg t "$1" --arg n "$2" '[.profiles[]? | select(.tool == $t and .name == $n)][0].identity.email // empty'
+}
+
+profile_exists() {
+  profiles_json | jq -e --arg t "$1" --arg n "$2" 'any(.profiles[]?; .tool == $t and .name == $n and (.system | not))' >/dev/null
+}
+
+seat_home() {
+  seats_json | jq -r --arg n "$1" '[.profiles[]? | select(.name == $n)][0].path // empty'
+}
+
+seat_names() {
+  seats_json | jq -r '.profiles[]?.name' | sort
+}
+
+# Seat naming: <tool>-<caam profile name>, so a seat maps back to its vault profile.
+seat_for() { printf '%s-%s' "$1" "$2"; }
+
+seat_tool() {
+  local home="$1" name="$2" provider=""
+  if [ -f "$home/.caam-shallow.json" ]; then
+    provider="$(jq -r '.provider // empty' "$home/.caam-shallow.json" 2>/dev/null || true)"
+  fi
+  if [ -z "$provider" ]; then
+    case "$name" in
+      codex-*) provider="codex" ;;
+      *) provider="claude" ;;
+    esac
+  fi
+  printf '%s' "$provider"
+}
+
+seat_profile() {
+  local name="$1" tool="$2"
+  case "$name" in
+    "$tool"-*) printf '%s' "${name#"$tool"-}" ;;
+    *) printf '' ;;
+  esac
+}
+
+# Resolve a seat name or die with the list of seats (and the closest match).
+resolve_seat() {
+  local name="$1" home
+  home="$(seat_home "$name")"
+  if [ -n "$home" ]; then
+    printf '%s' "$home"
+    return 0
+  fi
+  local names guess=""
+  names="$(seat_names | tr '\n' ' ')"
+  local s
+  for s in $names; do
+    case "$s" in
+      *"$name"*) guess="$s"; break ;;
+    esac
+  done
+  if [ -z "$guess" ]; then
+    local t
+    for t in $TOOLS; do
+      if [ -n "$(seat_home "$(seat_for "$t" "$name")")" ]; then
+        guess="$(seat_for "$t" "$name")"
+        break
+      fi
+    done
+  fi
+  if [ -z "$guess" ] && [ -n "$names" ]; then
+    # shellcheck disable=SC2086
+    guess="$(closest "$name" $names)"
+  fi
+  if [ -n "$guess" ]; then
+    die "$E_USAGE" "no seat named '$name'" "did you mean: $PROG ${CURRENT_CMD:-run} $guess" "seats: ${names:-none}"
+  fi
+  die "$E_USAGE" "no seat named '$name'" "seats: ${names:-none}" "create seats from your caam accounts: $PROG setup"
+}
+
+# --- seat facts --------------------------------------------------------------------
+
+# On macOS a Claude seat is exposed while its Library (or Library/Keychains)
+# links back to the real Library: `security` then finds the real login Keychain.
+seat_exposed() {
+  local home="$1" tool="$2"
+  [ "$tool" = "claude" ] || return 1
+  [ "$PLATFORM" = "Darwin" ] || return 1
+  [ -L "$home/Library" ] && return 0
+  [ -L "$home/Library/Keychains" ] && return 0
+  return 1
+}
+
+# Ask `security` itself. This is the ground truth the cheap check above predicts.
+seat_keychain_reachable() {
+  local home="$1"
+  [ "$PLATFORM" = "Darwin" ] || return 1
+  command -v security >/dev/null 2>&1 || return 1
+  HOME="$home" security login-keychain >/dev/null 2>&1
+}
+
+seat_has_token() {
+  local home="$1" tool="$2"
+  case "$tool" in
+    claude)
+      jq -e '((.claudeAiOauth.refreshToken // .claudeAiOauth.accessToken // "") | length) > 0' \
+        "$home/.claude/.credentials.json" >/dev/null 2>&1
+      ;;
+    codex)
+      jq -e '((.tokens.refresh_token // .OPENAI_API_KEY // "") | length) > 0' \
+        "$home/.codex/auth.json" >/dev/null 2>&1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+seat_email() {
+  local home="$1" tool="$2"
+  case "$tool" in
+    claude)
+      jq -r '.oauthAccount.emailAddress // empty' "$home/.claude.json" 2>/dev/null || true
+      ;;
+    codex)
+      jq -r '
+        def b64url: gsub("-"; "+") | gsub("_"; "/") | . + ("=" * ((4 - (length % 4)) % 4)) | @base64d;
+        (.tokens.id_token // "") | split(".") | if length > 1 then (.[1] | b64url | fromjson | .email // empty) else empty end
+      ' "$home/.codex/auth.json" 2>/dev/null || true
+      ;;
+  esac
+}
+
+# One JSON object per seat with the raw facts; state is derived in jq.
+seat_row() {
+  local name="$1" home="$2" tool profile exposed=false has_token=false email
+  tool="$(seat_tool "$home" "$name")"
+  profile="$(seat_profile "$name" "$tool")"
+  seat_exposed "$home" "$tool" && exposed=true
+  seat_has_token "$home" "$tool" && has_token=true
+  email="$(seat_email "$home" "$tool")"
+  jq -nc \
+    --arg name "$name" --arg path "$home" --arg tool "$tool" --arg profile "$profile" \
+    --arg email "$email" --argjson exposed "$exposed" --argjson has_token "$has_token" \
+    '{name: $name, path: $path, tool: $tool, profile: (if $profile == "" then null else $profile end),
+      email: (if $email == "" then null else $email end), exposed: $exposed, has_token: $has_token}'
+}
+
+# The whole picture: caam accounts joined with seats, states, and next commands.
+# shellcheck disable=SC2016 # jq program, not shell
+STATE_JQ='
+  def lc: ascii_downcase;
+  def rank: (. // "" | lc) as $p
+    | if ($p == "max" or $p == "pro") then 3
+      elif ($p == "team" or $p == "enterprise") then 2
+      elif $p == "plus" then 1 else 0 end;
+  . as $in
+  | ($in.profiles) as $profiles
+  | ([$profiles[] | select(.active)] | map({key: .tool, value: .}) | from_entries) as $active
+  | ($in.seats | map(
+      . as $s
+      | ([$profiles[] | select(.tool == $s.tool and .name == $s.profile)][0]) as $p
+      | ($active[$s.tool].identity.email // null) as $active_email
+      | . + {
+          expected_email: ($p.identity.email // null),
+          plan: ($p.identity.plan_type // null),
+          vault_profile: ($p != null),
+          state: (
+            if .exposed then "exposed"
+            elif (.has_token | not) then "logged-out"
+            elif ($p != null and .email != null and $p.identity.email != null
+                  and (.email | lc) != ($p.identity.email | lc)) then "wrong-account"
+            elif (.email != null and $active_email != null and (.email | lc) == ($active_email | lc))
+              then "same-as-active"
+            else "ready" end)
+        }
+    )) as $seats
+  | {
+      schema: "caam-seat.status/\($in.schema_version)",
+      version: $in.version,
+      platform: $in.platform,
+      ntm: $in.ntm,
+      pins: $in.pins,
+      tools: (["claude", "codex"] | map(. as $t | {
+        key: $t,
+        value: {
+          active: ($active[$t] | if . == null then null else {profile: .name, email: .identity.email, plan: .identity.plan_type} end),
+          accounts: [$profiles[] | select(.tool == $t) | . as $p
+            | ("\($t)-\($p.name)") as $seat_name
+            | ([$seats[] | select(.name == $seat_name)][0]) as $seat
+            | {
+                profile: $p.name, email: $p.identity.email, plan: $p.identity.plan_type, active: $p.active,
+                seat: (if $seat == null then null else $seat.name end),
+                state: (if $p.active then "active" elif $seat == null then "no-seat" else $seat.state end)
+              }],
+          swarm_seat: ([$seats[] | select(.tool == $t and .state == "ready")]
+            | sort_by([-(.plan | rank), .name]) | .[0].name // null)
+        }
+      }) | from_entries),
+      seats: $seats,
+      next: (
+        [ $profiles[] | select(.active | not) | ("\(.tool)-\(.name)") as $sn
+          | select([$seats[] | select(.name == $sn)] | length == 0)
+          | "caam-seat setup \(.tool)/\(.name)" ]
+        + [ $seats[] | select(.state == "exposed") | "caam-seat setup --repair \(.name)" ]
+        + [ $seats[] | select(.state == "logged-out" or .state == "wrong-account") | "caam-seat login \(.name)" ]
+        + [ $in.pins | to_entries[] | .value | to_entries[] | .value as $p
+            | select([$seats[] | select(.name == $p)] | length == 0)
+            | "caam-seat setup (pinned seat \($p) does not exist)" ]
+        + (if ($in.ntm.config_exists and ($in.ntm.claude_wired and $in.ntm.codex_wired | not))
+             then ["bash \($in.install_sh)"] else [] end)
+      )
+    }
+'
+
+state_json() {
+  local rows="" name home
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    home="$(seat_home "$name")"
+    [ -d "$home" ] || continue
+    rows="$rows$(seat_row "$name" "$home")"$'\n'
+  done < <(seat_names)
+  local seats_arr
+  seats_arr="$(printf '%s' "$rows" | jq -sc '.')"
+  local cw=false xw=false ce=false
+  [ -f "$NTM_CONFIG_FILE" ] && ce=true
+  ntm_wired claude && cw=true
+  ntm_wired codex && xw=true
+  jq -nc \
+    --argjson profiles "$(vault_profiles)" --argjson seats "$seats_arr" \
+    --arg version "$VERSION" --arg platform "$PLATFORM" --arg install_sh "$INSTALL_SH" \
+    --argjson schema_version "$SCHEMA_VERSION" \
+    --argjson ntm "{\"config\": $(jq -n --arg p "$NTM_CONFIG_FILE" '$p'), \"config_exists\": $ce, \"claude_wired\": $cw, \"codex_wired\": $xw}" \
+    --argjson pins "$(pins_json)" \
+    '{profiles: $profiles, seats: $seats, version: $version, platform: $platform,
+      install_sh: $install_sh, schema_version: $schema_version, ntm: $ntm, pins: $pins}' |
+    jq -c "$STATE_JQ"
+}
+
+seat_state() {
+  local name="$1"
+  state_json | jq -r --arg n "$name" '[.seats[] | select(.name == $n)][0].state // "missing"'
+}
+
+# --- project pins ----------------------------------------------------------------
+# A pin binds a project directory (its git top level) to a seat per tool, so
+# every claude/codex started there through caam-seat uses that account:
+# plain `ntm spawn`, `ntm add`, ntm restarts, and `caam-seat run claude`.
+# Stored in caam-seat's own file, not caam's project associations, because
+# those also steer `caam activate`, which switches the machine-wide login.
+
+pin_root() {
+  local dir top
+  dir="$(cd "$1" 2>/dev/null && pwd -P)" || die "$E_USAGE" "no such directory: $1"
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$top" ]; then
+    (cd "$top" && pwd -P)
+  else
+    printf '%s' "$dir"
+  fi
+}
+
+# pinned_seat TOOL DIR: the seat pinned at DIR or its nearest pinned parent.
+pinned_seat() {
+  local tool="$1" dir
+  [ -f "$PINS_FILE" ] || return 0
+  command -v jq >/dev/null 2>&1 ||
+    die "$E_SETUP" "jq is required to read the project pins in $PINS_FILE" "install it: brew install jq"
+  dir="$(cd "$2" 2>/dev/null && pwd -P)" || return 0
+  jq -r --arg t "$tool" --arg dir "$dir" '
+    ($dir | split("/")) as $parts
+    | [range($parts | length; 0; -1) as $n | ($parts[0:$n] | join("/")) | if . == "" then "/" else . end] as $dirs
+    | first($dirs[] as $d | (.pins[$d][$t] // empty)) // empty
+  ' "$PINS_FILE" 2>/dev/null ||
+    die "$E_FAIL" "$PINS_FILE is not valid JSON" "fix or remove it, then re-pin: $PROG pin <seat>"
+}
+
+pins_json() {
+  if [ -f "$PINS_FILE" ]; then
+    jq -c '.pins // {}' "$PINS_FILE" 2>/dev/null || printf '{}'
+  else
+    printf '{}'
+  fi
+}
+
+write_pins() { # write_pins JQ-FILTER [jq args...]: apply a filter to the pins file
+  local filter="$1" tmp
+  shift
+  mkdir -p "$(dirname "$PINS_FILE")"
+  tmp="$PINS_FILE.tmp.$$"
+  if [ -f "$PINS_FILE" ]; then
+    jq "$@" "$filter" "$PINS_FILE" >"$tmp"
+  else
+    jq -n "$@" '{schema: "caam-seat.pins/1", pins: {}}' | jq "$@" "$filter" >"$tmp"
+  fi
+  mv "$tmp" "$PINS_FILE"
+}
+
+ntm_projects_base() {
+  [ -f "$NTM_CONFIG_FILE" ] || return 0
+  sed -n 's/^[[:space:]]*projects_base[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$NTM_CONFIG_FILE" | head -n 1
+}
+
+# --- ntm wiring ----------------------------------------------------------------
+
+ntm_wired() {
+  local tool="$1"
+  [ -f "$NTM_CONFIG_FILE" ] || return 1
+  awk -v tool="$tool" '
+    /^[[:space:]]*\[/ { in_agents = ($0 ~ /^[[:space:]]*\[agents\][[:space:]]*$/) }
+    in_agents && $0 ~ "^[[:space:]]*" tool "[[:space:]]*=" && index($0, "caam-seat launch " tool) { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$NTM_CONFIG_FILE"
+}
+
+# --- isolation (macOS Claude seats) --------------------------------------------
+
+link_library_children() {
+  local src="$1" dst="$2" p n had_nullglob=0
+  if shopt -q nullglob; then had_nullglob=1; fi
+  shopt -s nullglob
+  for p in "$src"/* "$src"/.[!.]*; do
+    n="${p##*/}"
+    [ "$n" = "Keychains" ] && continue
+    if [ ! -e "$dst/$n" ] && [ ! -L "$dst/$n" ]; then
+      ln -s "$p" "$dst/$n"
+    fi
+  done
+  if [ "$had_nullglob" -eq 0 ]; then shopt -u nullglob; fi
+}
+
+acquire_lock() {
+  local lock="$1" tries=0
+  until mkdir "$lock" 2>/dev/null; do
+    # A lock older than a minute belongs to a process that died mid-repair.
+    if [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+      rmdir "$lock" 2>/dev/null || true
+      continue
+    fi
+    tries=$((tries + 1))
+    [ "$tries" -le 150 ] ||
+      die "$E_FAIL" "timed out waiting for $lock" "if no other caam-seat is running, remove it: rmdir '$lock'"
+    sleep 0.1
+  done
+}
+
+# Make a Claude seat's Library a real directory that links every child of the
+# real Library except Keychains. Idempotent and safe to run from many panes at once.
+isolate_seat() {
+  local home="$1" tool="$2"
+  [ "$tool" = "claude" ] || return 0
+  [ "$PLATFORM" = "Darwin" ] || return 0
+  local real_home="" lib="$home/Library" lock="$home/.caam-seat.lock"
+  if [ -f "$home/.caam-shallow.json" ]; then
+    real_home="$(jq -r '.real_home // empty' "$home/.caam-shallow.json" 2>/dev/null || true)"
+  fi
+  [ -n "$real_home" ] || real_home="$HOME"
+  [ "$real_home" != "$home" ] || die "$E_FAIL" "seat $home records itself as the real HOME" "recreate it: caam shallow-profile create <name> --force --tool claude"
+  local real_lib="$real_home/Library"
+  [ -d "$real_lib" ] || die "$E_FAIL" "real Library not found at $real_lib"
+
+  acquire_lock "$lock"
+  # shellcheck disable=SC2064
+  trap "rmdir '$lock' 2>/dev/null || true" EXIT
+  if [ -L "$lib" ]; then
+    local tmp="$home/.caam-seat-library.$$"
+    mkdir "$tmp"
+    link_library_children "$real_lib" "$tmp"
+    rm -f -- "$lib"
+    if [ -e "$lib" ] || [ -L "$lib" ]; then
+      die "$E_FAIL" "could not replace the Library symlink in $home"
+    fi
+    mv "$tmp" "$lib"
+  elif [ ! -e "$lib" ]; then
+    mkdir "$lib"
+  fi
+  link_library_children "$real_lib" "$lib"
+  if [ -L "$lib/Keychains" ]; then
+    rm -f -- "$lib/Keychains"
+  fi
+  rmdir "$lock" 2>/dev/null || true
+  trap - EXIT
+
+  if seat_exposed "$home" "$tool" || seat_keychain_reachable "$home"; then
+    die "$E_UNSAFE" "seat $home can still reach the real login Keychain" \
+      "inspect $lib, then run: $PROG doctor"
+  fi
+}
+
+# --- login ---------------------------------------------------------------------------
+
+login_seat() {
+  local name="$1" home tool profile expected
+  home="$(resolve_seat "$name")"
+  tool="$(seat_tool "$home" "$name")"
+  profile="$(seat_profile "$name" "$tool")"
+  expected=""
+  [ -n "$profile" ] && expected="$(profile_email "$tool" "$profile")"
+  isolate_seat "$home" "$tool"
+
+  if ! is_tty; then
+    die "$E_SETUP" "logging in to $name needs your terminal and a browser" \
+      "run this yourself: $PROG login $name"
+  fi
+  say "Logging in seat $name${expected:+ as $expected}. Finish the sign-in in your browser."
+  case "$tool" in
+    claude)
+      if [ -n "$expected" ]; then
+        run_interactive caam shallow-spawn "$name" -- claude auth login --email "$expected" >&2
+      else
+        run_interactive caam shallow-spawn "$name" -- claude auth login >&2
+      fi
+      ;;
+    codex) run_interactive caam shallow-spawn "$name" -- codex login >&2 ;;
+    *) die "$E_FAIL" "seat $name uses provider '$tool', which caam-seat does not handle" ;;
+  esac
+  verify_login "$name" "$home" "$tool" "$expected"
+}
+
+verify_login() {
+  local name="$1" home="$2" tool="$3" expected="$4" email
+  seat_has_token "$home" "$tool" ||
+    die "$E_FAIL" "seat $name has no login after sign-in" "try again: $PROG login $name"
+  email="$(seat_email "$home" "$tool")"
+  if [ "$tool" = "claude" ] && [ -z "$email" ]; then
+    email="$(caam shallow-spawn "$name" -- claude auth status 2>/dev/null | jq -r '.email // empty' 2>/dev/null || true)"
+  fi
+  if [ -n "$expected" ] && [ -n "$email" ] && [ "$(lower "$email")" != "$(lower "$expected")" ]; then
+    die "$E_FAIL" "seat $name signed in as $email, but it is the seat for $expected" \
+      "sign in again with the right account: $PROG login $name"
+  fi
+  say "Seat $name is logged in${email:+ as $email}."
+}
+
+# --- launch --------------------------------------------------------------------------
+
+# Check a seat can be launched for TOOL; repair isolation; refuse anything unsafe.
+prepare_launch() {
+  local name="$1" want_tool="$2" home tool
+  home="$(resolve_seat "$name")"
+  tool="$(seat_tool "$home" "$name")"
+  if [ -n "$want_tool" ] && [ "$tool" != "$want_tool" ]; then
+    die "$E_USAGE" "seat $name is a $tool seat, not a $want_tool seat" \
+      "pick a $want_tool seat: $PROG status"
+  fi
+  isolate_seat "$home" "$tool"
+  if ! seat_has_token "$home" "$tool"; then
+    die "$E_FAIL" "seat $name is not logged in" "log it in: $PROG login $name"
+  fi
+  printf '%s' "$tool"
+}
+
+# --- commands --------------------------------------------------------------------------
+
+cmd_status() {
+  local json=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --json) json=1 ;;
+      -h|--help) usage_status; exit 0 ;;
+      *) bad_flag status "$1" "--json" ;;
+    esac
+    shift
+  done
+  need_deps
+  local state
+  state="$(state_json)"
+  if [ "$json" -eq 1 ]; then
+    printf '%s\n' "$state" | jq '.'
+    return 0
+  fi
+  printf '%s\n' "$state" | jq -r '
+    def pad($n): tostring | . + (" " * ([$n - length, 0] | max));
+    (.tools | to_entries[] |
+      "\(.key)  active: \(if .value.active == null then "none" else "\(.value.active.profile) (\(.value.active.email // "?"), \(.value.active.plan // "?"))" end)",
+      (if (.value.accounts | length) == 0 then "  no caam profiles"
+       else "  \("ACCOUNT" | pad(32))\("PLAN" | pad(6))\("SEAT" | pad(40))STATE",
+         (.value.accounts[] | "  \(.profile | pad(32))\((.plan // "-") | pad(6))\((.seat // "-") | pad(40))\(.state)")
+       end),
+      (if .value.swarm_seat != null then "  swarms use: \(.value.swarm_seat)" else empty end),
+      ""),
+    (([.seats[] | select(.vault_profile | not)]) as $extra
+      | if ($extra | length) > 0 then
+          "seats without a caam vault profile",
+          ($extra[] | "  \(.name | pad(40))\((.email // "-") | pad(32))\(.state)"),
+          ""
+        else empty end),
+    (if (.pins | length) > 0 then "project pins",
+       (.pins | to_entries[] | "  \(.key)", (.value | to_entries[] | "    \(.key): \(.value)")), ""
+     else empty end),
+    "ntm templates: claude \(if .ntm.claude_wired then "wired" else "not wired" end), codex \(if .ntm.codex_wired then "wired" else "not wired" end)",
+    (if (.next | length) > 0 then "", "next:", (.next[] | "  \(.)") else empty end)
+  '
+}
+
+cmd_setup() {
+  local dry=0 json=0 no_login=0 repair_only=0 yes=0
+  local targets=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry=1 ;;
+      --json) json=1 ;;
+      --no-login) no_login=1 ;;
+      --repair) repair_only=1 ;;
+      --yes|-y) yes=1 ;;
+      -h|--help) usage_setup; exit 0 ;;
+      -*) bad_flag setup "$1" "--dry-run --no-login --repair --yes --json" ;;
+      *) targets+=("$1") ;;
+    esac
+    shift
+  done
+  need_deps
+
+  if [ "$repair_only" -eq 1 ]; then
+    if [ "${#targets[@]}" -eq 0 ]; then
+      local s
+      while IFS= read -r s; do
+        [ -n "$s" ] && targets+=("$s")
+      done < <(seat_names)
+    fi
+    local seat home tool
+    for seat in ${targets[@]+"${targets[@]}"}; do
+      home="$(resolve_seat "$seat")"
+      tool="$(seat_tool "$home" "$seat")"
+      if [ "$dry" -eq 1 ]; then
+        printf 'repair %s\n' "$seat"
+      else
+        isolate_seat "$home" "$tool"
+        say "Seat $seat: isolated."
+      fi
+    done
+    return 0
+  fi
+
+  # Default targets: every caam vault profile. The active account is reported
+  # and skipped below, since normal sessions already run on it.
+  local plan
+  plan="$(vault_profiles | jq -r '.[] | "\(.tool)/\(.name)"')"
+  if [ "${#targets[@]}" -gt 0 ]; then
+    plan=""
+    local t tool name
+    for t in "${targets[@]}"; do
+      case "$t" in
+        */*) tool="${t%%/*}"; name="${t#*/}" ;;
+        *) die "$E_USAGE" "'$t' is not <tool>/<caam profile>" "example: $PROG setup claude/you@example.com" \
+             "for an account caam does not know yet: $PROG add <claude|codex> <seat-name>" ;;
+      esac
+      case "$tool" in
+        claude|codex) ;;
+        *) die "$E_USAGE" "unknown tool '$tool' in '$t'" "tools: claude, codex" ;;
+      esac
+      profile_exists "$tool" "$name" ||
+        die "$E_USAGE" "caam has no $tool profile named '$name'" "list them: caam ls $tool" \
+          "for an account caam does not know yet: $PROG add $tool <seat-name>"
+      plan="$plan$tool/$name"$'\n'
+    done
+  fi
+
+  local results="" entry tool name seat home email state active
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    tool="${entry%%/*}"
+    name="${entry#*/}"
+    seat="$(seat_for "$tool" "$name")"
+    email="$(profile_email "$tool" "$name")"
+    active="$(active_email "$tool")"
+    if [ -n "$active" ] && [ "$(lower "$active")" = "$(lower "$email")" ]; then
+      say "Skipping $entry: it is the active $tool account, which your normal sessions already use."
+      results="$results$(jq -nc --arg s "$seat" --arg p "$entry" '{seat: $s, profile: $p, action: "skipped-active"}')"$'\n'
+      continue
+    fi
+    home="$(seat_home "$seat")"
+    if [ "$dry" -eq 1 ]; then
+      local action="ensure-isolated"
+      [ -n "$home" ] || action="create"
+      printf '%s %s (%s, %s)\n' "$action" "$seat" "$entry" "${email:-unknown email}"
+      results="$results$(jq -nc --arg s "$seat" --arg p "$entry" --arg a "$action" '{seat: $s, profile: $p, action: $a, dry_run: true}')"$'\n'
+      continue
+    fi
+    if [ -z "$home" ]; then
+      # Empty credentials on purpose: a fresh login gives the seat its own token
+      # family. Copying the vault token would make two homes rotate one token.
+      caam shallow-profile create "$seat" --tool "$tool" >/dev/null ||
+        die "$E_FAIL" "caam could not create seat $seat" "run it directly to see why: caam shallow-profile create $seat --tool $tool"
+      reload_seats
+      home="$(seat_home "$seat")"
+      [ -n "$home" ] || die "$E_FAIL" "caam created $seat but does not list it" "check: caam shallow-profile list"
+      say "Created seat $seat."
+    fi
+    isolate_seat "$home" "$tool"
+    state="$(seat_state "$seat")"
+    if [ "$state" = "logged-out" ] || [ "$state" = "wrong-account" ]; then
+      if [ "$no_login" -eq 1 ]; then
+        say "Seat $seat needs a login: $PROG login $seat"
+      elif ! is_tty; then
+        say "Seat $seat needs a login, which needs your terminal: $PROG login $seat"
+      else
+        local answer="y"
+        if [ "$yes" -eq 0 ]; then
+          printf 'Log in seat %s as %s now? It opens your browser. [Y/n/q] ' "$seat" "$email" >&2
+          read -r answer </dev/tty || answer="n"
+        fi
+        case "$answer" in
+          q|Q) say "Stopped."; break ;;
+          n|N) say "Skipped. Later: $PROG login $seat" ;;
+          *) ( login_seat "$seat" ) || say "Login for $seat did not finish. Retry: $PROG login $seat" ;;
+        esac
+      fi
+      state="$(seat_state "$seat")"
+    fi
+    say "Seat $seat: $state"
+    results="$results$(jq -nc --arg s "$seat" --arg p "$entry" --arg st "$state" '{seat: $s, profile: $p, state: $st}')"$'\n'
+  done <<EOF
+$plan
+EOF
+
+  if [ "$json" -eq 1 ]; then
+    printf '%s' "$results" | jq -s '{schema: "caam-seat.setup/1", seats: .}'
+  elif [ "$dry" -eq 0 ]; then
+    cmd_status
+  fi
+}
+
+cmd_add() {
+  [ "$#" -ge 1 ] || die "$E_USAGE" "add needs a tool and a seat name" "example: $PROG add codex work2"
+  case "${1:-}" in
+    -h|--help) usage_add; exit 0 ;;
+  esac
+  [ "$#" -ge 2 ] || die "$E_USAGE" "add needs a seat name after the tool" "example: $PROG add $1 work2"
+  local tool="$1" name="$2" no_login=0
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --no-login) no_login=1 ;;
+      *) bad_flag add "$1" "--no-login" ;;
+    esac
+    shift
+  done
+  case "$tool" in
+    claude|codex) ;;
+    *) die "$E_USAGE" "unknown tool '$tool'" "tools: claude, codex" "example: $PROG add codex work2" ;;
+  esac
+  need_deps
+  local seat="$name"
+  case "$seat" in
+    "$tool"-*) ;;
+    *) seat="$(seat_for "$tool" "$name")" ;;
+  esac
+  if profile_exists "$tool" "${seat#"$tool"-}"; then
+    die "$E_USAGE" "caam already has a $tool profile '${seat#"$tool"-}'" "use: $PROG setup $tool/${seat#"$tool"-}"
+  fi
+  local home
+  home="$(seat_home "$seat")"
+  if [ -z "$home" ]; then
+    caam shallow-profile create "$seat" --tool "$tool" >/dev/null ||
+      die "$E_FAIL" "caam could not create seat $seat" "run it directly to see why: caam shallow-profile create $seat --tool $tool"
+    reload_seats
+    home="$(seat_home "$seat")"
+    say "Created seat $seat."
+  fi
+  isolate_seat "$home" "$tool"
+  if [ "$no_login" -eq 1 ]; then
+    say "Seat $seat needs a login: $PROG login $seat"
+    return 0
+  fi
+  login_seat "$seat"
+}
+
+cmd_login() {
+  case "${1:-}" in
+    -h|--help) usage_login; exit 0 ;;
+    "") die "$E_USAGE" "login needs a seat name" "list seats: $PROG status" ;;
+  esac
+  need_deps
+  login_seat "$1"
+}
+
+cmd_run() {
+  case "${1:-}" in
+    -h|--help) usage_run; exit 0 ;;
+    ""|-*) die "$E_USAGE" "run needs a seat name, or claude/codex to use this project's pinned seat" \
+             "example: $PROG run claude-you@example.com" "list seats: $PROG status" ;;
+  esac
+  need_deps
+  local name="$1" tool
+  shift
+  [ "${1:-}" = "--" ] && shift
+  case "$name" in
+    claude|codex)
+      tool="$name"
+      name="$(pinned_seat "$tool" "$PWD")"
+      [ -n "$name" ] && [ "$name" != "none" ] ||
+        die "$E_USAGE" "no $tool seat is pinned for $(pin_root "$PWD")" \
+          "pin one here: $PROG pin <seat>" "or name the seat: $PROG run <seat>"
+      say "Using seat $name (pinned for this project)."
+      ;;
+  esac
+  tool="$(prepare_launch "$name" "")"
+  exec caam shallow-spawn "$name" -- "$tool" "$@"
+}
+
+# ntm template entry point: `caam-seat launch claude <args>`.
+# NTM_CC_SEAT / NTM_COD_SEAT pick the seat; unset or "none" runs the plain CLI.
+cmd_launch() {
+  case "${1:-}" in
+    -h|--help) usage_launch; exit 0 ;;
+    claude|codex) ;;
+    "") die "$E_USAGE" "launch needs a tool" "example: $PROG launch claude --model opus" ;;
+    *) die "$E_USAGE" "launch takes claude or codex, not '$1'" "example: $PROG launch claude --model opus" ;;
+  esac
+  local tool="$1" seat
+  shift
+  case "$tool" in
+    claude) seat="${NTM_CC_SEAT:-}" ;;
+    codex) seat="${NTM_COD_SEAT:-}" ;;
+  esac
+  [ -n "$seat" ] || seat="$(pinned_seat "$tool" "$PWD")"
+  if [ -z "$seat" ] || [ "$seat" = "none" ]; then
+    exec "$tool" "$@"
+  fi
+  need_deps
+  CURRENT_CMD="launch"
+  prepare_launch "$seat" "$tool" >/dev/null
+  exec caam shallow-spawn "$seat" -- "$tool" "$@"
+}
+
+cmd_pin() {
+  local seat="" dir="$PWD" json=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dir) dir="${2:?--dir needs a directory}"; shift ;;
+      --dir=*) dir="${1#*=}" ;;
+      --json) json=1 ;;
+      -h|--help) usage_pin; exit 0 ;;
+      -*) bad_flag pin "$1" "--dir --json" ;;
+      *) [ -z "$seat" ] || die "$E_USAGE" "pin takes one seat" "example: $PROG pin claude-you@example.com"
+         seat="$1" ;;
+    esac
+    shift
+  done
+  need_jq
+  if [ -z "$seat" ]; then
+    if [ "$json" -eq 1 ]; then
+      pins_json | jq '{schema: "caam-seat.pins/1", pins: .}'
+    else
+      pins_json | jq -r 'if length == 0 then "no project pins. Pin one from a project: caam-seat pin <seat>"
+        else to_entries[] | "\(.key)", (.value | to_entries[] | "  \(.key): \(.value)") end'
+    fi
+    return 0
+  fi
+  need_deps
+  local home tool root state
+  home="$(resolve_seat "$seat")"
+  tool="$(seat_tool "$home" "$seat")"
+  root="$(pin_root "$dir")"
+  # shellcheck disable=SC2016 # jq program
+  write_pins '.pins[$root][$tool] = $seat' --arg root "$root" --arg tool "$tool" --arg seat "$seat"
+  say "Pinned $root: $tool there runs as seat $seat."
+  state="$(seat_state "$seat")"
+  if [ "$state" != "ready" ]; then
+    say "warning: seat $seat is $state; until that is fixed, $tool launches there will refuse to start. Fix: $PROG login $seat"
+  fi
+  say "Swarm: ntm spawn <session> --cc=2 (or caam-seat spawn). One session: cd $root && $PROG run $tool"
+}
+
+cmd_unpin() {
+  local tool="" dir="$PWD"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      claude|codex) tool="$1" ;;
+      --dir) dir="${2:?--dir needs a directory}"; shift ;;
+      --dir=*) dir="${1#*=}" ;;
+      -h|--help) usage_pin; exit 0 ;;
+      *) die "$E_USAGE" "unpin takes an optional tool (claude or codex) and --dir" "example: $PROG unpin claude" ;;
+    esac
+    shift
+  done
+  need_jq
+  local root
+  root="$(pin_root "$dir")"
+  if [ "$(pins_json | jq -r --arg r "$root" 'has($r)')" != "true" ]; then
+    die "$E_USAGE" "nothing is pinned at $root" "list pins: $PROG pin"
+  fi
+  if [ -n "$tool" ]; then
+    # shellcheck disable=SC2016 # jq program
+    write_pins 'del(.pins[$root][$tool]) | if (.pins[$root] | length) == 0 then del(.pins[$root]) else . end' \
+      --arg root "$root" --arg tool "$tool"
+    say "Unpinned $tool at $root."
+  else
+    # shellcheck disable=SC2016 # jq program
+    write_pins 'del(.pins[$root])' --arg root "$root"
+    say "Unpinned $root."
+  fi
+}
+
+# Pick the seat a swarm uses for TOOL: explicit name, "none", or the best ready seat.
+pick_swarm_seat() {
+  local tool="$1" explicit="$2" state
+  if [ "$explicit" = "none" ]; then
+    return 0
+  fi
+  if [ -n "$explicit" ]; then
+    state="$(seat_state "$explicit")"
+    case "$state" in
+      ready) printf '%s' "$explicit" ;;
+      same-as-active) say "warning: seat $explicit is logged in to the active $tool account, so this swarm shares its limits."
+        printf '%s' "$explicit" ;;
+      missing) resolve_seat "$explicit" >/dev/null ;;
+      exposed) die "$E_UNSAFE" "seat $explicit is not isolated yet" "fix it: $PROG setup --repair $explicit" ;;
+      *) die "$E_FAIL" "seat $explicit is $state" "fix it: $PROG login $explicit" ;;
+    esac
+    return 0
+  fi
+  state_json | jq -r --arg t "$tool" '.tools[$t].swarm_seat // empty'
+}
+
+cmd_spawn() {
+  case "${1:-}" in
+    -h|--help) usage_spawn; exit 0 ;;
+    ""|-*) die "$E_USAGE" "spawn needs the ntm session name first" "example: $PROG spawn myproject --label alt --cc=2 --cod=2" ;;
+  esac
+  need_deps
+  local session="$1"
+  shift
+  local cc_explicit="" cod_explicit="" dry=0 label="" wants_cc=0 wants_cod=0 counts_known=0
+  local pass=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --claude-seat) cc_explicit="${2:?--claude-seat needs a seat name or none}"; shift ;;
+      --claude-seat=*) cc_explicit="${1#*=}" ;;
+      --codex-seat) cod_explicit="${2:?--codex-seat needs a seat name or none}"; shift ;;
+      --codex-seat=*) cod_explicit="${1#*=}" ;;
+      --dry-run) dry=1 ;;
+      --label) label="${2:-}"; pass+=("$1" "${2:-}"); shift ;;
+      --label=*) label="${1#*=}"; pass+=("$1") ;;
+      --cc|--cc=*) wants_cc=1; counts_known=1; pass+=("$1") ;;
+      --cod|--cod=*) wants_cod=1; counts_known=1; pass+=("$1") ;;
+      --pane-env) case "${2:-}" in
+          NTM_CC_SEAT=*|NTM_COD_SEAT=*) die "$E_USAGE" "do not set ${2%%=*} yourself" "use --claude-seat / --codex-seat" ;;
+        esac
+        pass+=("$1" "${2:-}"); shift ;;
+      *) pass+=("$1") ;;
+    esac
+    shift
+  done
+  [ "$counts_known" -eq 1 ] || { wants_cc=1; wants_cod=1; }
+
+  # A project pin wins over the automatic pick, so a project stays on its account.
+  local base proj_dir="" pinned
+  base="$(ntm_projects_base)"
+  # shellcheck disable=SC2088 # matching a literal "~/" from the config
+  case "$base" in "~/"*) base="$HOME/${base#"~/"}" ;; esac
+  if [ -n "$base" ] && [ -d "$base/$session" ]; then
+    proj_dir="$base/$session"
+  fi
+  if [ -n "$proj_dir" ]; then
+    if [ -z "$cc_explicit" ]; then
+      pinned="$(pinned_seat claude "$proj_dir")"
+      if [ -n "$pinned" ]; then
+        cc_explicit="$pinned"
+        say "claude: seat $pinned is pinned for $proj_dir"
+      fi
+    fi
+    if [ -z "$cod_explicit" ]; then
+      pinned="$(pinned_seat codex "$proj_dir")"
+      if [ -n "$pinned" ]; then
+        cod_explicit="$pinned"
+        say "codex: seat $pinned is pinned for $proj_dir"
+      fi
+    fi
+  fi
+
+  local cc_seat="" cod_seat=""
+  if [ "$wants_cc" -eq 1 ]; then
+    cc_seat="$(pick_swarm_seat claude "$cc_explicit")"
+    if [ -z "$cc_seat" ] && [ "$cc_explicit" != "none" ]; then
+      if [ "$counts_known" -eq 1 ]; then
+        die "$E_SETUP" "no ready claude seat, so the claude panes would run on the active account" \
+          "set one up: $PROG setup" "or run them on the active account on purpose: --claude-seat none"
+      fi
+      say "note: no ready claude seat; any claude panes run on the active account."
+    fi
+  fi
+  if [ "$wants_cod" -eq 1 ]; then
+    cod_seat="$(pick_swarm_seat codex "$cod_explicit")"
+    if [ -z "$cod_seat" ] && [ "$cod_explicit" != "none" ]; then
+      if [ "$counts_known" -eq 1 ]; then
+        die "$E_SETUP" "no ready codex seat, so the codex panes would run on the active account" \
+          "add one: $PROG add codex <seat-name>" "or run them on the active account on purpose: --codex-seat none"
+      fi
+      say "note: no ready codex seat; any codex panes run on the active account."
+    fi
+  fi
+  if [ -z "$cc_seat" ] && [ -z "$cod_seat" ]; then
+    die "$E_USAGE" "no seat chosen, so this is a plain ntm spawn" "run ntm directly: ntm spawn $session ${pass[*]+"${pass[*]}"}"
+  fi
+  if [ -n "$cc_seat" ] && ! ntm_wired claude; then
+    die "$E_SETUP" "ntm's claude template does not call caam-seat, so the seat would be ignored" \
+      "wire it (backs up the config first): bash $INSTALL_SH"
+  fi
+  if [ -n "$cod_seat" ] && ! ntm_wired codex; then
+    die "$E_SETUP" "ntm's codex template does not call caam-seat, so the seat would be ignored" \
+      "wire it (backs up the config first): bash $INSTALL_SH"
+  fi
+
+  local cmd=(ntm spawn "$session")
+  cmd+=(${pass[@]+"${pass[@]}"})
+  [ -n "$cc_seat" ] && cmd+=(--pane-env "NTM_CC_SEAT=$cc_seat")
+  [ -n "$cod_seat" ] && cmd+=(--pane-env "NTM_COD_SEAT=$cod_seat")
+  local tmux_session="$session"
+  [ -n "$label" ] && tmux_session="$session--$label"
+
+  say "claude panes: ${cc_seat:-active account}; codex panes: ${cod_seat:-active account}"
+  if [ "$dry" -eq 1 ]; then
+    printf '%q ' "${cmd[@]}"
+    printf '\n'
+    [ -n "$cc_seat" ] && printf 'tmux setenv -t %q NTM_CC_SEAT %q\n' "=$tmux_session" "$cc_seat"
+    [ -n "$cod_seat" ] && printf 'tmux setenv -t %q NTM_COD_SEAT %q\n' "=$tmux_session" "$cod_seat"
+    return 0
+  fi
+  "${cmd[@]}"
+  # Later `ntm add` panes read the seat from the tmux session environment.
+  if [ -n "$cc_seat" ]; then
+    tmux setenv -t "=$tmux_session" NTM_CC_SEAT "$cc_seat" 2>/dev/null ||
+      say "warning: could not record the seat for later panes; run: tmux setenv -t $tmux_session NTM_CC_SEAT $cc_seat"
+  fi
+  if [ -n "$cod_seat" ]; then
+    tmux setenv -t "=$tmux_session" NTM_COD_SEAT "$cod_seat" 2>/dev/null ||
+      say "warning: could not record the seat for later panes; run: tmux setenv -t $tmux_session NTM_COD_SEAT $cod_seat"
+  fi
+  say "Add panes later with: ntm add $tmux_session --cc=1 (they use the same seats)"
+}
+
+cmd_doctor() {
+  local json=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --json) json=1 ;;
+      -h|--help) usage_doctor; exit 0 ;;
+      *) bad_flag doctor "$1" "--json" ;;
+    esac
+    shift
+  done
+  local checks="" gaps=0
+  check() { # id status detail fix
+    checks="$checks$(jq -nc --arg id "$1" --arg s "$2" --arg d "$3" --arg f "${4:-}" \
+      '{id: $id, status: $s, detail: $d, fix: (if $f == "" then null else $f end)}')"$'\n'
+    [ "$2" = "gap" ] && gaps=$((gaps + 1))
+    return 0
+  }
+
+  if command -v jq >/dev/null 2>&1; then :; else
+    printf 'GAP  jq is not installed (brew install jq)\n'
+    exit "$E_SETUP"
+  fi
+  if ! command -v caam >/dev/null 2>&1; then
+    check deps.caam gap "caam is not on PATH" "install caam: https://github.com/Dicklesworthstone/coding_agent_account_manager"
+  elif ! caam shallow-spawn --help >/dev/null 2>&1; then
+    check deps.caam gap "caam has no shallow-spawn command" "caam update"
+  else
+    check deps.caam ok "$(caam version 2>/dev/null | head -n 1)"
+  fi
+  if [ "$PLATFORM" = "Darwin" ] && ! command -v security >/dev/null 2>&1; then
+    check deps.security gap "macOS security tool not found, so isolation cannot be verified" ""
+  fi
+  if command -v caam-seat >/dev/null 2>&1; then
+    check install.shim ok "caam-seat is on PATH: $(command -v caam-seat)"
+  else
+    check install.shim gap "caam-seat is not on PATH, so ntm templates cannot find it" "bash $INSTALL_SH"
+  fi
+  if [ ! -f "$NTM_CONFIG_FILE" ]; then
+    check ntm.templates warn "no ntm config at $NTM_CONFIG_FILE; swarms through ntm are not wired" "bash $INSTALL_SH"
+  else
+    local t
+    for t in $TOOLS; do
+      if ntm_wired "$t"; then
+        check "ntm.$t" ok "ntm $t template calls caam-seat launch $t"
+      else
+        check "ntm.$t" gap "ntm $t template does not call caam-seat, so swarm seats are ignored" "bash $INSTALL_SH"
+      fi
+    done
+  fi
+
+  if command -v caam >/dev/null 2>&1 && caam shallow-spawn --help >/dev/null 2>&1; then
+    load_all
+    local state
+    state="$(state_json)"
+    local name home tool st email
+    while IFS=$'\t' read -r name home tool st email; do
+      [ -n "$name" ] || continue
+      if [ "$tool" = "claude" ] && [ "$PLATFORM" = "Darwin" ]; then
+        if seat_keychain_reachable "$home"; then
+          check "seat.$name.isolation" gap "seat $name can reach the real login Keychain, so Claude runs as the active account" "$PROG setup --repair $name"
+        else
+          check "seat.$name.isolation" ok "seat $name cannot reach the real login Keychain"
+        fi
+      fi
+      case "$st" in
+        ready) check "seat.$name.login" ok "seat $name is logged in as ${email:-unknown}" ;;
+        same-as-active) check "seat.$name.login" warn "seat $name is logged in to the active account, so it shares its limits" "$PROG login $name" ;;
+        exposed) ;;
+        *) check "seat.$name.login" gap "seat $name is $st" "$PROG login $name" ;;
+      esac
+    done < <(printf '%s' "$state" | jq -r '.seats[] | [.name, .path, .tool, .state, (.email // "")] | @tsv')
+
+    local pdir ptool pseat pst
+    while IFS=$'\t' read -r pdir ptool pseat; do
+      [ -n "$pdir" ] || continue
+      pst="$(printf '%s' "$state" | jq -r --arg n "$pseat" '[.seats[] | select(.name == $n)][0].state // "missing"')"
+      case "$pst" in
+        ready|same-as-active) check "pin.$pdir.$ptool" ok "$pdir runs $ptool as seat $pseat" ;;
+        missing) check "pin.$pdir.$ptool" gap "$pdir pins $ptool to seat $pseat, which does not exist, so $ptool launches there are refused" \
+                   "$PROG unpin $ptool --dir $pdir" ;;
+        *) check "pin.$pdir.$ptool" gap "$pdir pins $ptool to seat $pseat, which is $pst, so $ptool launches there are refused" \
+             "$PROG login $pseat" ;;
+      esac
+    done < <(printf '%s' "$state" | jq -r '.pins | to_entries[] | .key as $d | .value | to_entries[] | [$d, .key, .value] | @tsv')
+  fi
+
+  if [ "$json" -eq 1 ]; then
+    printf '%s' "$checks" | jq -s --argjson gaps "$gaps" '{schema: "caam-seat.doctor/1", ok: ($gaps == 0), gaps: $gaps, checks: .}'
+  else
+    printf '%s' "$checks" | jq -r '
+      (if .status == "ok" then "OK  " elif .status == "gap" then "GAP " elif .status == "warn" then "WARN" else "SKIP" end)
+      + " " + .detail + (if .fix != null and .status != "ok" then "\n     fix: " + .fix else "" end)'
+    if [ "$gaps" -gt 0 ]; then
+      printf '\n%d gap(s).\n' "$gaps"
+    else
+      printf '\nAll checks passed.\n'
+    fi
+  fi
+  [ "$gaps" -eq 0 ] || exit "$E_FAIL"
+}
+
+cmd_capabilities() {
+  need_jq
+  jq -n --arg version "$VERSION" '{
+    name: "caam-seat",
+    version: $version,
+    contract_version: 1,
+    purpose: "Run Claude Code and Codex on several caam accounts at once, one shallow profile (seat) per account.",
+    commands: {
+      status: {args: "[--json]", reads: true, description: "caam accounts, their seats, the seat swarms use, and next commands"},
+      setup: {args: "[<tool>/<profile>...] [--dry-run] [--no-login] [--yes] [--repair] [--json]", description: "create and log in a seat for each non-active caam vault profile; idempotent"},
+      add: {args: "<claude|codex> <seat-name> [--no-login]", description: "create and log in a seat for an account caam does not have"},
+      login: {args: "<seat>", description: "log a seat in (browser) and check the account"},
+      run: {args: "<seat|claude|codex> [-- <cli args>...]", description: "open the seat CLI as that account; claude/codex use the project pin"},
+      spawn: {args: "<session> [ntm spawn flags] [--claude-seat S|none] [--codex-seat S|none] [--dry-run]", description: "ntm spawn with claude/codex panes on seats"},
+      launch: {args: "<claude|codex> [cli args...]", description: "ntm template entry point; seat from NTM_CC_SEAT / NTM_COD_SEAT, else the project pin, else the plain CLI"},
+      pin: {args: "[<seat>] [--dir DIR] [--json]", description: "pin a project (git top level) to a seat; no seat lists pins"},
+      unpin: {args: "[claude|codex] [--dir DIR]", description: "remove a project pin"},
+      doctor: {args: "[--json]", reads: true, description: "verify isolation, logins and ntm wiring"},
+      capabilities: {args: "[--json]", reads: true},
+      help: {args: "[command]"}
+    },
+    env: {
+      NTM_CC_SEAT: "seat for claude panes (launch); unset or none = active account",
+      NTM_COD_SEAT: "seat for codex panes (launch); unset or none = active account",
+      NTM_CONFIG: "ntm config path (default ~/.config/ntm/config.toml)",
+      CAAM_SHALLOW_HOMES_DIR: "caam seat base dir (default ~/orch-homes)",
+      CAAM_SEAT_PINS: "project pins file (default ~/.config/caam-seat/pins.json)"
+    },
+    seat_naming: "<tool>-<caam profile name>",
+    seat_states: ["ready", "same-as-active", "logged-out", "wrong-account", "exposed", "no-seat", "active"],
+    exit_codes: {"0": "ok", "1": "failed or gaps found", "2": "usage error", "3": "missing dependency or setup step", "4": "refused: seat not isolated"},
+    schemas: ["caam-seat.status/1", "caam-seat.setup/1", "caam-seat.doctor/1", "caam-seat.pins/1"]
+  }'
+}
+
+# --- help ----------------------------------------------------------------------------
+
+usage() {
+  cat <<EOF
+caam-seat $VERSION: run Claude Code and Codex on several caam accounts at once
+
+A seat is a caam shallow profile with its own login. Seats are named
+<tool>-<caam profile>, for example claude-you@example.com.
+
+Start here:
+  caam-seat status                 your caam accounts, their seats, and what to do next
+  caam-seat setup                  create and log in a seat for every non-active account
+
+Use seats:
+  caam-seat pin <seat>             make this project always use that seat
+  caam-seat run <seat>             open Claude or Codex as that seat's account
+  caam-seat run claude             ...or as this project's pinned claude seat
+  caam-seat spawn <session> --cc=2 --cod=2 [ntm spawn flags]
+                                   ntm swarm whose panes run on seats
+
+More:
+  caam-seat add <claude|codex> <name>   seat for an account caam does not have yet
+  caam-seat login <seat>                log a seat in again
+  caam-seat setup --repair [<seat>]     re-apply macOS isolation
+  caam-seat doctor [--json]             check isolation, logins and ntm wiring
+  caam-seat launch <claude|codex> ...   used by ntm templates (reads NTM_CC_SEAT / NTM_COD_SEAT)
+  caam-seat capabilities                machine-readable contract (JSON)
+  caam-seat help <command>              details for one command
+
+status, setup and doctor take --json. Exit codes: 0 ok, 1 failed or gaps,
+2 usage, 3 missing dependency or setup step, 4 refused because a seat is not isolated.
+EOF
+}
+
+usage_status() {
+  cat <<'EOF'
+caam-seat status [--json]
+
+Lists caam's claude and codex vault profiles, the seat for each, its state,
+the seat a swarm would use, whether ntm is wired, and the next commands to run.
+
+States: active (the account your normal sessions use), no-seat, logged-out,
+wrong-account, exposed (macOS: can still read the real login Keychain),
+same-as-active, ready.
+EOF
+}
+
+usage_setup() {
+  cat <<'EOF'
+caam-seat setup [<tool>/<profile>...] [--dry-run] [--no-login] [--yes] [--json]
+caam-seat setup --repair [<seat>...]
+
+With no profiles, sets up a seat for every caam vault profile that is not the
+active account. For each one it creates the caam shallow profile
+<tool>-<profile> with empty credentials, isolates it from the login Keychain on
+macOS, and offers a browser login (claude auth login / codex login). A fresh
+login gives the seat its own token instead of sharing the vault copy's.
+Safe to re-run: existing seats are kept and only repaired or logged in.
+
+  --dry-run    show what would be created, change nothing
+  --no-login   create and isolate only; log in later with caam-seat login <seat>
+  --yes, -y    log in to each seat without asking first
+  --repair     only re-apply isolation to existing seats (all seats by default)
+  --json       print the result as JSON
+
+Examples:
+  caam-seat setup
+  caam-seat setup claude/you@example.com
+  caam-seat setup --dry-run
+EOF
+}
+
+usage_add() {
+  cat <<'EOF'
+caam-seat add <claude|codex> <seat-name> [--no-login]
+
+Creates a seat for an account that caam does not have in its vault, for example
+a new Codex account, then logs it in. The seat is named <tool>-<seat-name>.
+
+Example:
+  caam-seat add codex work2      # creates codex-work2, then runs codex login
+EOF
+}
+
+usage_login() {
+  cat <<'EOF'
+caam-seat login <seat>
+
+Runs the CLI's own login inside the seat (opens your browser), then checks the
+seat signed in to the account its name says. Needs your terminal.
+EOF
+}
+
+usage_run() {
+  cat <<'EOF'
+caam-seat run <seat|claude|codex> [-- <claude or codex args>...]
+
+Opens the seat's CLI as the seat's account. The seat's tool is chosen for you.
+`caam-seat run claude` (or codex) uses the seat pinned for the current project.
+
+Examples:
+  caam-seat run claude-you@example.com
+  caam-seat run claude
+  caam-seat run claude-you@example.com -- --model opus
+  caam-seat run codex-work2 -- -m gpt-6-sol
+EOF
+}
+
+usage_launch() {
+  cat <<'EOF'
+caam-seat launch <claude|codex> [cli args...]
+
+The entry point ntm's [agents] templates call. The seat comes from NTM_CC_SEAT
+(claude) or NTM_COD_SEAT (codex), else from the project pin for the current
+directory. With neither, or "none", it runs the plain CLI on the active account,
+so wired templates behave exactly as before in unpinned projects. With a seat
+set it repairs isolation, refuses to start if the seat is unsafe or logged out,
+then execs the CLI under the seat.
+EOF
+}
+
+usage_spawn() {
+  cat <<'EOF'
+caam-seat spawn <session> [ntm spawn flags] [--claude-seat <seat>|none] [--codex-seat <seat>|none] [--dry-run]
+
+Runs `ntm spawn` with the seats passed to the panes, then records them in the
+tmux session so later `ntm add` panes use them too. Without --claude-seat or
+--codex-seat it uses the project's pin (caam-seat pin), else the ready seat
+with the biggest plan that is not the active account. "none" keeps that
+tool's panes on the active account. In a pinned project a plain `ntm spawn`
+also works, because the wired templates read the pin.
+
+Examples:
+  caam-seat spawn myproject --label alt --cc=2 --cod=2
+  caam-seat spawn myproject --label alt --cc=2 --claude-seat claude-you@example.com
+  caam-seat spawn myproject --label alt --cc=2 --cod=2 --dry-run
+EOF
+}
+
+usage_pin() {
+  cat <<'EOF'
+caam-seat pin <seat> [--dir DIR]     pin this project to a seat (DIR defaults to here)
+caam-seat pin [--json]               list project pins
+caam-seat unpin [claude|codex] [--dir DIR]
+
+A pin binds a project (its git top level) to a seat for that seat's tool.
+Every claude or codex started there through caam-seat then uses that account:
+plain `ntm spawn` and `ntm add` panes (via the wired ntm templates), ntm
+restarts, `caam-seat spawn`, and `caam-seat run claude` for one session.
+NTM_CC_SEAT / NTM_COD_SEAT or --claude-seat / --codex-seat still override it,
+and "none" forces the active account.
+
+Pins live in ~/.config/caam-seat/pins.json, separate from caam's project
+associations, because those also steer `caam activate`, which switches the
+machine-wide login.
+
+Examples:
+  cd ~/Code/github/client-a && caam-seat pin claude-you@client-a.com
+  caam-seat pin claude-you@example.com --dir ~/Code/github/side-project
+  caam-seat unpin claude
+EOF
+}
+
+usage_doctor() {
+  cat <<'EOF'
+caam-seat doctor [--json]
+
+Checks caam, the caam-seat shim, ntm template wiring, and every seat: on macOS
+it asks `security` whether the seat can reach the real login Keychain, then
+checks the seat's login and account. Exit 1 when any gap is found.
+EOF
+}
+
+# closest WORD CANDIDATE...: the candidate within edit distance 2, if any.
+closest() {
+  local word="$1"
+  shift
+  printf '%s\n' "$@" | awk -v w="$word" '
+    function dist(a, b,    la, lb, i, j, d, c, x, y, z) {
+      la = length(a); lb = length(b)
+      for (i = 0; i <= la; i++) d[i, 0] = i
+      for (j = 0; j <= lb; j++) d[0, j] = j
+      for (i = 1; i <= la; i++)
+        for (j = 1; j <= lb; j++) {
+          c = (substr(a, i, 1) == substr(b, j, 1)) ? 0 : 1
+          x = d[i-1, j] + 1; y = d[i, j-1] + 1; z = d[i-1, j-1] + c
+          d[i, j] = (x < y ? (x < z ? x : z) : (y < z ? y : z))
+          if (i > 1 && j > 1 && substr(a, i, 1) == substr(b, j-1, 1) && substr(a, i-1, 1) == substr(b, j, 1) && d[i-2, j-2] + 1 < d[i, j])
+            d[i, j] = d[i-2, j-2] + 1
+        }
+      return d[la, lb]
+    }
+    { s = dist(w, $0); if (best == "" || s < bs) { best = $0; bs = s } }
+    END { if (best != "" && bs <= 2) print best }'
+}
+
+bad_flag() {
+  local sub="$1" flag="$2" valid="$3" guess=""
+  # shellcheck disable=SC2086
+  guess="$(closest "${flag%%=*}" $valid)"
+  if [ -n "$guess" ]; then
+    die "$E_USAGE" "unknown option '$flag' for $sub" "did you mean: $PROG $sub $guess" "options: $valid"
+  fi
+  die "$E_USAGE" "unknown option '$flag' for $sub" "options: $valid" "details: $PROG help $sub"
+}
+
+# Map near-miss command names to the real command.
+canonical_command() {
+  case "$1" in
+    status|st|ls|list|accounts|seats) printf 'status' ;;
+    setup|init|create|sync) printf 'setup' ;;
+    add|new) printf 'add' ;;
+    login|auth|signin|sign-in) printf 'login' ;;
+    run|open|exec|shell|start) printf 'run' ;;
+    spawn|swarm) printf 'spawn' ;;
+    pin|pins|bind) printf 'pin' ;;
+    unpin|unbind) printf 'unpin' ;;
+    launch) printf 'launch' ;;
+    doctor|check|verify|health) printf 'doctor' ;;
+    capabilities|caps|robot-docs) printf 'capabilities' ;;
+    help|-h|--help) printf 'help' ;;
+    version|-v|-V|--version) printf 'version' ;;
+    *) return 1 ;;
+  esac
+}
+
+suggest_command() {
+  local guess
+  # shellcheck disable=SC2086
+  guess="$(closest "$1" $COMMANDS)"
+  [ -n "$guess" ] || return 1
+  printf '%s' "$guess"
+}
+
+main() {
+  if [ "$#" -eq 0 ]; then
+    usage
+    exit 0
+  fi
+  local raw="$1" cmd
+  shift
+  if ! cmd="$(canonical_command "$raw")"; then
+    local guess=""
+    guess="$(suggest_command "$raw" || true)"
+    if [ -n "$guess" ]; then
+      die "$E_USAGE" "unknown command '$raw'" "did you mean: $PROG $guess" "commands: $COMMANDS"
+    fi
+    die "$E_USAGE" "unknown command '$raw'" "commands: $COMMANDS" "start with: $PROG status"
+  fi
+  if [ "$cmd" != "$raw" ] && [ "$raw" != "-h" ] && [ "$raw" != "--help" ] && [ "$raw" != "--version" ] && [ "$raw" != "-v" ] && [ "$raw" != "-V" ]; then
+    say "note: '$raw' runs '$PROG $cmd'"
+  fi
+  CURRENT_CMD="$cmd"
+  case "$cmd" in
+    status) cmd_status "$@" ;;
+    setup) cmd_setup "$@" ;;
+    add) cmd_add "$@" ;;
+    login) cmd_login "$@" ;;
+    run) cmd_run "$@" ;;
+    spawn) cmd_spawn "$@" ;;
+    launch) cmd_launch "$@" ;;
+    pin) cmd_pin "$@" ;;
+    unpin) cmd_unpin "$@" ;;
+    doctor) cmd_doctor "$@" ;;
+    capabilities) cmd_capabilities "$@" ;;
+    version) printf 'caam-seat %s\n' "$VERSION" ;;
+    help)
+      case "${1:-}" in
+        "") usage ;;
+        *)
+          local sub
+          sub="$(canonical_command "$1" || true)"
+          case "$sub" in
+            status) usage_status ;; setup) usage_setup ;; add) usage_add ;; login) usage_login ;;
+            run) usage_run ;; spawn) usage_spawn ;; launch) usage_launch ;; doctor) usage_doctor ;;
+            pin|unpin) usage_pin ;;
+            *) usage ;;
+          esac
+          ;;
+      esac
+      ;;
+  esac
+}
+
+main "$@"

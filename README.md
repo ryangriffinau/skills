@@ -63,6 +63,7 @@ Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns
 | [add-prompt](skills/meta/add-prompt) | ⚪ | 0.6.0 | meta, prompts | Save portable `p-*` skills with verbatim bodies and verify publication and installation |
 | [teach-me-nugget](skills/meta/teach-me-nugget) | ⚪ | 0.1.0 | learning, mentoring | Explain a concept from current work with concrete examples and usable heuristics |
 | [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.0 | convex, production, verification, dcg | Read prod Convex state with a query-only tool + installer that also ships the dcg pack it pairs with |
+| [caam-seat](skills/engineering/caam-seat) | ⚪ | 0.1.0 | caam, ntm, accounts, swarm | Run Claude Code and Codex sessions or whole ntm swarms on other caam accounts at once, with the macOS Keychain isolation caam's shallow profiles lack |
 
 > Drafting skills are still being generalized or battle-tested. Keep repo-specific behavior behind a local init/profile.
 
