@@ -14,6 +14,7 @@ Active workflows must not depend on this archive.
 | `pr-closeout` | 2026-10-14 | None specified | Retired at the owner's request. |
 | `p-agent-swarm-launcher` | 2026-10-14 | `p-flywheel-conductor-jsm` and jsm skills | Use the current conductor and native coordination workflow. |
 | `p-install-agent-skill` | 2026-10-14 | Repository README install instructions | Old prompt duplicated installation behavior and obsolete bridges. |
+| `caam-seat` | 2026-11-02 | Stock caam and ntm; a Linux box per account set | Claude seats can't be logged in on macOS: a keychain dialog appears and nothing is saved to a file. Its ntm template wrapper blocked ntm's conversation resume, and it duplicated caam #130. See `RETIRED.md` for the alternatives. |
 
 | `prompts/p-plan-to-beads` | 2026-09-28 | `skills/beads-workflow` (`/beads-workflow`) | Plans are encoded with the beads-workflow skill, which carries the dependency, self-containment, and polish rules; the prompt was never the path actually run. |
 
