@@ -9,6 +9,36 @@ description: "Run Claude Code and Codex on several caam accounts at the same tim
 
 # caam-seat
 
+> **Retired on 2026-11-02. Do not install.** It is kept for history. The original documentation follows below the line.
+
+## Why it was retired
+
+- **A Claude login can't be saved inside a seat on macOS.** A seat withholds `Library/Keychains`, so it has no reachable keychain. In caam's isolated profile, which has the same condition, `/login` made macOS show a "Keychain Not Found" dialog with a **Reset To Defaults** button, and no `.credentials.json` was written. A seat is expected to behave the same; the seat case itself wasn't run. The test stubs assumed Claude Code falls back to the file, so this path was never really verified.
+- **Its ntm wiring cost stock behaviour.** Prefixing ntm's agent templates with `caam-seat launch` makes ntm treat every pane as an unknown wrapper. ntm 1.37.2 then refuses to resume those panes' conversations (session restore, crash recovery), even when no seat is in use. This comes from reading ntm's code. A `${...}` expansion in a template blocks it too.
+- **Panes from `caam-seat spawn` can't be restarted.** It passed seats with `--pane-env`, and ntm 1.37.2 refuses to relaunch a pane whose environment values it didn't save.
+- **It duplicated two fast-moving upstream tools.** caam #130 now withholds the Keychain itself. That fix is on caam's main branch but wasn't released at the time of retirement.
+
+## Use instead
+
+- **Stock caam, one Claude account at a time per machine.** Switch with `caam activate` when no swarm is running, then restart open sessions. After `caam backup`, check which account the saved login really belongs to. caam can label a login with the wrong account or organisation.
+- **ntm agent templates without a wrapper.**
+- **Concurrent accounts:** a dedicated Linux box, or a Linux user, per account set.
+- **One ntm session on another Claude account on macOS:**
+  1. Run `ntm create`.
+  2. Run `tmux setenv -t <session> CLAUDE_CODE_OAUTH_TOKEN <token>`, using a token from `claude setup-token`.
+  3. Panes added afterwards use that account and keep it when restarted. Panes created before the `setenv` don't, so start the conductor with the token too.
+  4. Setup tokens can only make model requests: claude.ai connectors, Claude in Chrome and Remote Control are unavailable.
+
+  This was tested on 2026-11-02 with `ntm add` and `tmux respawn-pane`, using a short-lived token copied from caam rather than a setup token.
+
+To remove an installed copy:
+1. Run `bash ~/.agents/skills/caam-seat/scripts/install.sh --unwire-ntm`.
+2. Delete `~/.local/bin/caam-seat`.
+3. Run `npx skills remove caam-seat -g`.
+4. Remove its seats with `caam shallow-profile delete <seat> --force`.
+
+---
+
 `caam activate` switches one machine-wide login. Every new session and every running pane follows it. To run a second account at the same time you need a separate HOME per account. caam's shallow profiles provide that. This skill calls each one a **seat** and adds the missing pieces:
 
 - seats named after caam's vault profiles: `claude-<profile>` and `codex-<profile>`;
