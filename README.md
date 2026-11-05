@@ -99,6 +99,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-hitl](prompts/p-hitl.md) | 🟡 | Hand back each decision only you can make: situation, options, recommendation, dense enough to decide in one read |
 | [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
 | [p-smarter-beads-wizard](skills/planning/p-smarter-beads-wizard) | 🟡 | Read every bead deeply, revise the beads with idea-wizard's smartest ideas, then offer polishing and a complementary round |
+| [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | Check for a terminal CLI, then schedule a usage trigger at fixed Melbourne times from Claude Code, Codex or Gemini CLI |
 
 ## Credits
 
