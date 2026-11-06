@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Check that an agent session runs in a terminal CLI, and manage a local
-# trigger job for Codex CLI or Gemini CLI at fixed Melbourne times.
+# Check that an agent session runs in a terminal CLI, print the cloud schedule
+# for hosts whose CLI has a cloud scheduler, and manage the local fallback job
+# for hosts whose CLI does not.
 set -euo pipefail
 
+TRIGGER_NAME="agent-5-hour-trigger"
 TRIGGER_TZ="Australia/Melbourne"
-TRIGGER_HOURS="00|05|10|15|20"
+TRIGGER_HOUR_LIST="0 5 10 15 20"
 TRIGGER_MINUTE=7
-TRIGGER_PROMPT="Reply with OK. This is a scheduled usage trigger."
+TRIGGER_PROMPT="Quickly check in and reply with OK. Do nothing else."
 RUN_TIMEOUT_SECONDS=300
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agent-5-hour-trigger"
 LABEL_PREFIX="local.agent-5-hour-trigger"
+LOCAL_HOSTS="codex agy"
 
 usage() {
   cat <<'USAGE'
@@ -17,19 +20,24 @@ usage: agent-5-hour-trigger <command> [options]
 
 commands:
   check
-      Report the agent host and surface. Exit 0 only for a terminal CLI.
-  install --host codex|gemini --model MODEL [--dry-run]
-      Install a local job that runs the host CLI at 12:07am, 5:07am,
-      10:07am, 3:07pm and 8:07pm Melbourne time. Uses launchd on macOS
-      and crontab on Linux. Claude Code uses /schedule instead.
-  uninstall --host codex|gemini [--dry-run]
+      Report the agent host, surface and scheduler. Exit 0 only for a
+      terminal CLI.
+  plan --host claude|codex|agy
+      Print the trigger settings: the cloud task for claude, the local job
+      for codex and agy.
+  install --host codex|agy [--dry-run] [--replace]
+      Install the local job. It runs the host CLI at 12:07am, 5:07am,
+      10:07am, 3:07pm and 8:07pm Melbourne time, using launchd on macOS and
+      crontab on Linux. An installed job is left alone unless --replace.
+  uninstall --host codex|agy [--dry-run]
       Remove the local job and its runner. The log is kept.
-  status
-      Show installed jobs and recent log lines.
+  status [--host codex|agy]
+      Show the local job state and recent log lines.
   classify PATH ARGS
       Print the agent and surface for one process path and argument string.
 
-check exit codes: 0 terminal CLI, 3 known non-CLI surface, 4 unknown host.
+check exit codes: 0 terminal CLI, 3 non-CLI surface, 4 no agent found,
+5 a sandbox blocked the check (rerun it outside the sandbox).
 AGENT_5_HOUR_TRIGGER_START_PID sets where the process ancestry walk starts.
 USAGE
 }
@@ -39,7 +47,67 @@ fail() {
   exit 2
 }
 
+# ---------- hosts ----------
+# To add a host: give it a scheduler in host_scheduler, teach agent_kind its
+# process name, and give a local host a command in host_trigger_command.
+
+host_scheduler() {
+  case "$1" in
+    claude) echo cloud ;;
+    codex|agy) echo local ;;
+    *) echo unknown ;;
+  esac
+}
+
+host_trigger_command() {
+  local host="$1" bin="$2"
+  case "$host" in
+    codex) printf '%q ' "$bin" exec --skip-git-repo-check --ephemeral --sandbox read-only "$TRIGGER_PROMPT" ;;
+    agy) printf '%q ' "$bin" -p "$TRIGGER_PROMPT" ;;
+    *) fail "no local trigger command for $host" ;;
+  esac
+}
+
+# Print claude, codex or agy when a process is one of those agents.
+agent_kind() {
+  local exe_base="${1##*/}" first="${2%% *}" first_base name
+  first_base="${first##*/}"
+  for name in "$exe_base" "$first_base"; do
+    case "$name" in
+      claude|codex|agy)
+        echo "$name"
+        return 0
+        ;;
+    esac
+  done
+}
+
+# Print cli, desktop or ide for an agent process path and arguments.
+classify_surface() {
+  local exe="$1" args="$2"
+  case "$exe $args" in
+    *"/.vscode/extensions/"*|*"/.vscode-server/"*|*"/.cursor/extensions/"*|*"/.cursor-server/"*|*"/.windsurf/extensions/"*|*"/.antigravity/extensions/"*|*"/JetBrains/"*)
+      echo ide
+      return 0
+      ;;
+    *".app/Contents/"*)
+      echo desktop
+      return 0
+      ;;
+  esac
+  case " $args " in
+    *" app-server "*) echo desktop ;;
+    *" acp "*|*" --acp "*|*" --experimental-acp "*) echo ide ;;
+    *) echo cli ;;
+  esac
+}
+
 # ---------- process inspection ----------
+
+can_inspect_processes() {
+  [ -r /proc/self/status ] && return 0
+  ps -o pid= -p "$$" >/dev/null 2>&1
+}
 
 proc_exe() {
   local pid="$1" exe=""
@@ -73,47 +141,6 @@ proc_tty() {
   ps -o tty= -p "$1" 2>/dev/null | tr -d '[:space:]' || true
 }
 
-# Print claude, codex or gemini when a process is one of those agents.
-agent_kind() {
-  local exe="$1" args="$2" exe_base first first_base name
-  exe_base="${exe##*/}"
-  first="${args%% *}"
-  first_base="${first##*/}"
-  for name in codex claude gemini; do
-    if [ "$exe_base" = "$name" ] || [ "$first_base" = "$name" ]; then
-      echo "$name"
-      return 0
-    fi
-  done
-  case "$exe_base" in
-    node|bun)
-      case " $args " in
-        *"/gemini "*|*"/gemini-cli/"*|*"@google/gemini-cli"*) echo gemini ;;
-      esac
-      ;;
-  esac
-}
-
-# Print cli, desktop or ide for an agent process path and arguments.
-classify_surface() {
-  local exe="$1" args="$2"
-  case "$exe $args" in
-    *"/.vscode/extensions/"*|*"/.vscode-server/"*|*"/.cursor/extensions/"*|*"/.cursor-server/"*|*"/.windsurf/extensions/"*|*"/.antigravity/extensions/"*|*"/JetBrains/"*)
-      echo ide
-      return 0
-      ;;
-    *".app/Contents/"*)
-      echo desktop
-      return 0
-      ;;
-  esac
-  case " $args " in
-    *" app-server "*) echo desktop ;;
-    *" --acp "*|*" --experimental-acp "*) echo ide ;;
-    *) echo cli ;;
-  esac
-}
-
 cmd_classify() {
   [ "$#" -eq 2 ] || fail "classify needs PATH and ARGS"
   local kind
@@ -125,34 +152,42 @@ cmd_classify() {
 }
 
 cmd_check() {
-  local pid="${AGENT_5_HOUR_TRIGGER_START_PID:-$PPID}" depth=0
+  local pid="${AGENT_5_HOUR_TRIGGER_START_PID:-$PPID}" depth=0 inspection="ok"
   local exe args kind=""
   local tree_host="" tree_surface="" agent_pid="" agent_exe="" agent_tty=""
   local host="unknown" surface="unknown"
 
   # The nearest agent process in this command's ancestry is the host.
-  while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 50 ]; do
-    exe="$(proc_exe "$pid")"
-    args="$(proc_args "$pid")"
-    kind="$(agent_kind "$exe" "$args")"
-    if [ -n "$kind" ]; then
-      tree_host="$kind"
-      tree_surface="$(classify_surface "$exe" "$args")"
-      agent_pid="$pid"
-      agent_exe="$exe"
-      agent_tty="$(proc_tty "$pid")"
-      break
-    fi
-    pid="$(proc_ppid "$pid")"
-    depth=$((depth + 1))
-  done
+  if can_inspect_processes; then
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 50 ]; do
+      exe="$(proc_exe "$pid")"
+      args="$(proc_args "$pid")"
+      kind="$(agent_kind "$exe" "$args")"
+      if [ -n "$kind" ]; then
+        tree_host="$kind"
+        tree_surface="$(classify_surface "$exe" "$args")"
+        agent_pid="$pid"
+        agent_exe="$exe"
+        agent_tty="$(proc_tty "$pid")"
+        break
+      fi
+      pid="$(proc_ppid "$pid")"
+      depth=$((depth + 1))
+    done
+  else
+    inspection="blocked"
+  fi
 
+  # Without a process match, use the markers each host sets for the commands
+  # it runs. Codex sets CODEX_SANDBOX for sandboxed commands, where ps is
+  # blocked. It is checked before Claude's markers, which leak into processes
+  # started from a Claude session.
   if [ -n "$tree_host" ]; then
     host="$tree_host"
+  elif [ -n "${CODEX_SANDBOX:-}" ]; then
+    host="codex"
   elif [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]; then
     host="claude"
-  elif [ "${GEMINI_CLI:-}" = "1" ]; then
-    host="gemini"
   fi
 
   case "$host" in
@@ -170,11 +205,10 @@ cmd_check() {
       fi
       ;;
     codex)
-      surface="${tree_surface:-unknown}"
+      surface="${tree_surface:-sandboxed}"
       ;;
-    gemini)
-      # Gemini CLI sets GEMINI_CLI=1 for the commands its shell tool runs.
-      surface="${tree_surface:-cli}"
+    agy)
+      surface="${tree_surface:-unknown}"
       ;;
   esac
 
@@ -185,6 +219,8 @@ cmd_check() {
 
   echo "host=$host"
   echo "surface=$surface"
+  echo "scheduler=$(host_scheduler "$host")"
+  echo "process_inspection=$inspection"
   if [ "$host" = "claude" ]; then
     echo "claude_entrypoint=${CLAUDE_CODE_ENTRYPOINT:-}"
   fi
@@ -194,8 +230,12 @@ cmd_check() {
     echo "agent_tty=${agent_tty:-none}"
   fi
 
+  if [ "$surface" = "sandboxed" ] || { [ "$host" = "unknown" ] && [ "$inspection" = "blocked" ]; }; then
+    echo "agent-5-hour-trigger: a sandbox blocked the process check; rerun it outside the sandbox" >&2
+    return 5
+  fi
   if [ "$host" = "unknown" ]; then
-    echo "agent-5-hour-trigger: no Claude Code, Codex or Gemini CLI session found" >&2
+    echo "agent-5-hour-trigger: no Claude Code, Codex or Antigravity CLI session found" >&2
     return 4
   fi
   if [ "$surface" != "cli" ]; then
@@ -205,7 +245,18 @@ cmd_check() {
   return 0
 }
 
-# ---------- local schedule ----------
+# ---------- schedule ----------
+
+# Without zone data, TZ=Australia/Melbourne silently means UTC.
+require_zone() {
+  local dir
+  for dir in "${TZDIR:-}" /usr/share/zoneinfo /usr/lib/zoneinfo /usr/share/lib/zoneinfo /var/db/timezone/zoneinfo; do
+    if [ -n "$dir" ] && [ -f "$dir/$TRIGGER_TZ" ]; then
+      return 0
+    fi
+  done
+  fail "time zone data for $TRIGGER_TZ not found; install tzdata"
+}
 
 offset_minutes() {
   local z="$1" sign=1 h m
@@ -214,6 +265,32 @@ offset_minutes() {
   h="${z%??}"
   m="${z#??}"
   echo $((sign * (10#$h * 60 + 10#$m)))
+}
+
+hour_csv() {
+  printf '%s' "$TRIGGER_HOUR_LIST" | tr -s ' ' ','
+}
+
+hour_gate_pattern() {
+  local h out=""
+  for h in $TRIGGER_HOUR_LIST; do
+    out="$out|$(printf '%02d' "$h")"
+  done
+  echo "${out#|}"
+}
+
+# The same times as a UTC cron at the current Melbourne offset. It drifts by an
+# hour when daylight saving changes, unlike the CRON_TZ form.
+utc_cron() {
+  local off h total minute=0 hours=""
+  off="$(offset_minutes "$(TZ="$TRIGGER_TZ" date +%z)")"
+  for h in $TRIGGER_HOUR_LIST; do
+    total=$((((h * 60 + TRIGGER_MINUTE - off) % 1440 + 1440) % 1440))
+    minute=$((total % 60))
+    hours="$hours $((total / 60))"
+  done
+  hours="$(printf '%s\n' "$hours" | tr -s ' ' '\n' | sed '/^$/d' | sort -n | paste -sd, -)"
+  echo "$minute $hours * * *"
 }
 
 # The local minute that matches minute 7 in Melbourne. DST shifts are whole
@@ -225,32 +302,77 @@ local_minute() {
   echo $(((((TRIGGER_MINUTE + here - there) % 60) + 60) % 60))
 }
 
+runner_path() {
+  echo "$STATE_DIR/run-$1.sh"
+}
+
+log_path() {
+  echo "$STATE_DIR/$1.log"
+}
+
+plist_path() {
+  echo "$HOME/Library/LaunchAgents/$LABEL_PREFIX.$1.plist"
+}
+
+cron_marker() {
+  echo "# agent-5-hour-trigger:$1"
+}
+
+cron_line() {
+  local minute="$1" runner="$2" host="$3"
+  echo "$minute * * * * /bin/bash $(printf '%q' "$runner") $(cron_marker "$host")"
+}
+
+current_crontab() {
+  crontab -l 2>/dev/null || true
+}
+
 xml_escape() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
 }
 
-render_runner() {
-  local host="$1" bin="$2" model="$3" log="$4" cmd
-  case "$host" in
-    codex)
-      cmd="$(printf '%q ' "$bin" exec --skip-git-repo-check --ephemeral --sandbox read-only -m "$model" "$TRIGGER_PROMPT")"
+# installed, broken (files without a loaded job) or not-installed.
+job_state() {
+  local host="$1" table
+  case "$(uname -s)" in
+    Darwin)
+      if launchctl print "gui/$(id -u)/$LABEL_PREFIX.$host" >/dev/null 2>&1; then
+        echo installed
+      elif [ -f "$(plist_path "$host")" ] || [ -f "$(runner_path "$host")" ]; then
+        echo broken
+      else
+        echo not-installed
+      fi
       ;;
-    gemini)
-      cmd="$(printf '%q ' "$bin" -m "$model" -p "$TRIGGER_PROMPT")"
+    Linux)
+      table="$(current_crontab)"
+      if grep -qF "$(cron_marker "$host")" <<<"$table"; then
+        echo installed
+      elif [ -f "$(runner_path "$host")" ]; then
+        echo broken
+      else
+        echo not-installed
+      fi
       ;;
+    *) echo not-installed ;;
   esac
+}
+
+render_runner() {
+  local host="$1" bin="$2" log="$3" cmd
+  cmd="$(host_trigger_command "$host" "$bin")"
   cat <<RUNNER
 #!/bin/bash
 # Generated by agent-5-hour-trigger install for $host. Reinstall to change it.
 set -u
 export PATH=$(printf '%q' "$PATH")
 case "\$(TZ=$TRIGGER_TZ date +%H)" in
-  $TRIGGER_HOURS) ;;
+  $(hour_gate_pattern)) ;;
   *) exit 0 ;;
 esac
 cd $(printf '%q' "$STATE_DIR") || exit 1
 {
-  printf '=== %s host=%s model=%s\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z')" $host $(printf '%q' "$model")
+  printf '=== %s host=%s\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z')" $host
   $cmd</dev/null &
   pid=\$!
   ( sleep $RUN_TIMEOUT_SECONDS && kill "\$pid" 2>/dev/null ) &
@@ -291,19 +413,13 @@ render_plist() {
 PLIST
 }
 
-cron_marker() {
-  echo "# agent-5-hour-trigger:$1"
-}
-
-cron_line() {
-  local minute="$1" runner="$2" host="$3"
-  echo "$minute * * * * /bin/bash $(printf '%q' "$runner") $(cron_marker "$host")"
-}
-
-parse_host_args() {
+# Sets HOST, DRY_RUN and REPLACE. ALLOWED lists the hosts this command takes.
+parse_args() {
+  local allowed="$1"
+  shift
   HOST=""
-  MODEL=""
   DRY_RUN=0
+  REPLACE=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --host)
@@ -311,64 +427,94 @@ parse_host_args() {
         HOST="$2"
         shift 2
         ;;
-      --model)
-        [ "$#" -ge 2 ] || fail "missing --model value"
-        MODEL="$2"
-        shift 2
-        ;;
       --dry-run)
         DRY_RUN=1
+        shift
+        ;;
+      --replace)
+        REPLACE=1
         shift
         ;;
       *) fail "unknown argument: $1" ;;
     esac
   done
-  case "$HOST" in
-    codex|gemini) ;;
-    claude) fail "Claude Code schedules this with /schedule, not a local job" ;;
-    *) fail "--host must be codex or gemini" ;;
+  case " $allowed " in
+    *" $HOST "*) ;;
+    *)
+      if [ "$HOST" = "claude" ]; then
+        fail "Claude Code schedules this in the cloud with /schedule; see: plan --host claude"
+      fi
+      fail "--host must be one of: $allowed"
+      ;;
   esac
 }
 
+cmd_plan() {
+  parse_args "claude $LOCAL_HOSTS" "$@"
+  require_zone
+  local scheduler
+  scheduler="$(host_scheduler "$HOST")"
+  echo "host=$HOST"
+  echo "scheduler=$scheduler"
+  echo "name=$TRIGGER_NAME"
+  echo "melbourne_times=00:07 05:07 10:07 15:07 20:07"
+  echo "prompt=$TRIGGER_PROMPT"
+  if [ "$scheduler" = "cloud" ]; then
+    echo "cron=CRON_TZ=$TRIGGER_TZ $TRIGGER_MINUTE $(hour_csv) * * *"
+    echo "cron_utc=$(utc_cron)"
+    echo "repository=none"
+    echo "connectors=none"
+  else
+    echo "local_minute=$(local_minute)"
+    echo "next=install --host $HOST --dry-run"
+  fi
+}
+
 cmd_install() {
-  parse_host_args "$@"
-  [ -n "$MODEL" ] || fail "--model is required; use the lightest model $HOST lists"
-  local bin minute runner log label plist="" os
+  parse_args "$LOCAL_HOSTS" "$@"
+  require_zone
+  local bin state minute runner log label plist="" os
   bin="$(command -v "$HOST" || true)"
   case "$bin" in
     /*) ;;
     *) fail "$HOST CLI not found on PATH" ;;
   esac
-  minute="$(local_minute)"
-  runner="$STATE_DIR/run-$HOST.sh"
-  log="$STATE_DIR/$HOST.log"
-  label="$LABEL_PREFIX.$HOST"
   os="$(uname -s)"
+  case "$os" in
+    Darwin) plist="$(plist_path "$HOST")" ;;
+    Linux) command -v crontab >/dev/null 2>&1 || fail "crontab not found; install cron first" ;;
+    *) fail "unsupported OS: $os" ;;
+  esac
+  state="$(job_state "$HOST")"
+  minute="$(local_minute)"
+  runner="$(runner_path "$HOST")"
+  log="$(log_path "$HOST")"
+  label="$LABEL_PREFIX.$HOST"
 
   echo "host=$HOST"
-  echo "model=$MODEL"
+  echo "scheduler=local"
   echo "cli=$bin"
+  echo "prompt=$TRIGGER_PROMPT"
   echo "melbourne_times=00:07 05:07 10:07 15:07 20:07"
   echo "local_minute=$minute"
   echo "runner=$runner"
   echo "log=$log"
+  if [ "$os" = "Darwin" ]; then
+    echo "launchd_plist=$plist"
+  else
+    echo "crontab_marker=$(cron_marker "$HOST")"
+  fi
+  echo "existing_state=$state"
 
-  case "$os" in
-    Darwin)
-      plist="$HOME/Library/LaunchAgents/$label.plist"
-      echo "scheduler=launchd"
-      echo "plist=$plist"
-      ;;
-    Linux)
-      command -v crontab >/dev/null 2>&1 || fail "crontab not found; install cron first"
-      echo "scheduler=crontab"
-      ;;
-    *) fail "unsupported OS: $os" ;;
-  esac
+  if [ "$state" = "installed" ] && [ "$REPLACE" -eq 0 ]; then
+    echo "status=already-installed"
+    echo "agent-5-hour-trigger: the $HOST trigger is already installed; use --replace to reinstall it" >&2
+    return 0
+  fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "--- runner"
-    render_runner "$HOST" "$bin" "$MODEL" "$log"
+    render_runner "$HOST" "$bin" "$log"
     if [ "$os" = "Darwin" ]; then
       echo "--- plist"
       render_plist "$label" "$runner" "$minute" "$log"
@@ -381,7 +527,7 @@ cmd_install() {
   fi
 
   mkdir -p "$STATE_DIR"
-  render_runner "$HOST" "$bin" "$MODEL" "$log" >"$runner.tmp"
+  render_runner "$HOST" "$bin" "$log" >"$runner.tmp"
   chmod 700 "$runner.tmp"
   mv "$runner.tmp" "$runner"
 
@@ -390,68 +536,75 @@ cmd_install() {
     render_plist "$label" "$runner" "$minute" "$log" >"$plist"
     launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
     launchctl bootstrap "gui/$(id -u)" "$plist"
-    launchctl print "gui/$(id -u)/$label" >/dev/null || fail "launchd did not load $label"
-    echo "installed=launchd:$label"
   else
-    local line
-    line="$(cron_line "$minute" "$runner" "$HOST")"
-    { crontab -l 2>/dev/null | grep -vF "$(cron_marker "$HOST")" || true; echo "$line"; } | crontab -
-    crontab -l | grep -qF "$(cron_marker "$HOST")" || fail "crontab line not found after install"
-    echo "installed=crontab"
+    local table
+    table="$(current_crontab)"
+    {
+      grep -vF "$(cron_marker "$HOST")" <<<"$table" || true
+      cron_line "$minute" "$runner" "$HOST"
+    } | sed '/^$/d' | crontab -
   fi
+  [ "$(job_state "$HOST")" = "installed" ] || fail "the $HOST job did not load"
+  echo "status=installed"
 }
 
 cmd_uninstall() {
-  parse_host_args "$@"
-  local runner="$STATE_DIR/run-$HOST.sh" label="$LABEL_PREFIX.$HOST"
-  local plist="$HOME/Library/LaunchAgents/$label.plist"
+  parse_args "$LOCAL_HOSTS" "$@"
+  local state runner plist
+  state="$(job_state "$HOST")"
+  runner="$(runner_path "$HOST")"
+  plist="$(plist_path "$HOST")"
+  echo "host=$HOST"
+  echo "existing_state=$state"
+  if [ "$state" = "not-installed" ]; then
+    echo "status=not-installed"
+    return 0
+  fi
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "would remove the $HOST job and $runner"
-    [ "$(uname -s)" = "Darwin" ] && echo "would remove $plist"
+    if [ "$(uname -s)" = "Darwin" ]; then
+      echo "would remove $plist"
+    fi
     return 0
   fi
   case "$(uname -s)" in
     Darwin)
-      launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+      launchctl bootout "gui/$(id -u)/$LABEL_PREFIX.$HOST" >/dev/null 2>&1 || true
       rm -f "$plist"
       ;;
     Linux)
-      if crontab -l >/dev/null 2>&1; then
-        { crontab -l | grep -vF "$(cron_marker "$HOST")" || true; } | crontab -
+      local table
+      table="$(current_crontab)"
+      if [ -n "$table" ]; then
+        { grep -vF "$(cron_marker "$HOST")" <<<"$table" || true; } | crontab -
       fi
       ;;
   esac
   rm -f "$runner"
-  echo "removed=$HOST"
+  [ "$(job_state "$HOST")" = "not-installed" ] || fail "the $HOST job is still present"
+  echo "status=removed"
 }
 
 cmd_status() {
-  local host label plist log
-  for host in codex gemini; do
-    label="$LABEL_PREFIX.$host"
-    plist="$HOME/Library/LaunchAgents/$label.plist"
-    log="$STATE_DIR/$host.log"
-    echo "== $host"
-    case "$(uname -s)" in
-      Darwin)
-        if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
-          echo "launchd=loaded"
-        elif [ -f "$plist" ]; then
-          echo "launchd=plist present, not loaded"
-        else
-          echo "launchd=not installed"
-        fi
-        ;;
-      Linux)
-        if crontab -l 2>/dev/null | grep -qF "$(cron_marker "$host")"; then
-          echo "crontab=installed"
-        else
-          echo "crontab=not installed"
-        fi
-        ;;
-    esac
+  local hosts host log
+  if [ "$#" -gt 0 ]; then
+    parse_args "claude $LOCAL_HOSTS" "$@"
+    hosts="$HOST"
+  else
+    hosts="$LOCAL_HOSTS"
+  fi
+  for host in $hosts; do
+    echo "host=$host"
+    echo "scheduler=$(host_scheduler "$host")"
+    if [ "$host" = "claude" ]; then
+      echo "state=cloud"
+      echo "note=list cloud tasks with /schedule list"
+      continue
+    fi
+    echo "state=$(job_state "$host")"
+    log="$(log_path "$host")"
     if [ -f "$log" ]; then
-      echo "recent log:"
+      echo "recent_log:"
       tail -n 6 "$log"
     fi
   done
@@ -464,6 +617,7 @@ main() {
   fi
   case "$cmd" in
     check) cmd_check "$@" ;;
+    plan) cmd_plan "$@" ;;
     install) cmd_install "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
     status) cmd_status "$@" ;;
