@@ -100,7 +100,7 @@ Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts
 | [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
 | [p-smarter-beads-wizard](skills/planning/p-smarter-beads-wizard) | 🟡 | Read every bead deeply, revise the beads with idea-wizard's smartest ideas, then offer polishing and a complementary round |
 | [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | From Claude Code, Codex or agy in a terminal, schedule a quick check at fixed Melbourne times on the provider's cloud, or as a local job where the CLI has no cloud scheduler |
-| [p-reality-check-biggest-flaws](skills/engineering/p-reality-check-biggest-flaws) | 🟡 | Read AGENTS.md and README.md, run reality-check-for-project end to end, then find the biggest flaws, their fixes, and any behavior that is scripted instead of emergent |
+| [p-reality-check-biggest-flaws](skills/engineering/p-reality-check-biggest-flaws) | 🟡 | Read AGENTS.md and README.md, run reality-check-for-project end to end, then find the biggest flaws, their fixes, and any capability that is special-cased instead of emergent from composition |
 
 ## Credits
 
