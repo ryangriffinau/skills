@@ -1,0 +1,6 @@
+interface:
+  display_name: "p-reality-check-biggest-flaws"
+  short_description: "Reality-check the project and find its biggest flaws"
+  default_prompt: "Use $p-reality-check-biggest-flaws on this project."
+policy:
+  allow_implicit_invocation: false
