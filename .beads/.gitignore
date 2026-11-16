@@ -44,3 +44,11 @@ redirect
 
 # bv (beads viewer) lock file
 .bv.lock
+
+# FrankenSQLite sidecars and migration leftovers (machine-local database state)
+*fsqlite-ns-gate
+*fsqlite-ns-use
+*fsqlite-migration-state
+*.db-wal-cert
+*.db-wal-cert-head
+.beads.db.schema-migration-*
