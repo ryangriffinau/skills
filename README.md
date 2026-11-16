@@ -24,7 +24,15 @@ npx --yes --package=node@22.20.0 --package=skills@1.7.1 -- skills add ryangriffi
 
 GitHub supplies the published source. Only committed, pushed content is available through a remote install. Without `--global`, installation is project-scoped. The provider name `antigravity-cli` selects agy; `antigravity` selects the separate IDE.
 
-Global installations use `~/.agents/skills`. Codex reads this universal location. The installer creates provider links under `~/.claude/skills` and `~/.gemini/antigravity-cli/skills`. Global provenance is recorded in `~/.agents/.skill-lock.json`; project installs use `skills-lock.json`.
+Global installations use `~/.agents/skills`. Codex reads this universal location, and the installer links Claude Code there. Global provenance is recorded in `~/.agents/.skill-lock.json`; project installs use `skills-lock.json`.
+
+CLI 1.7.1 treats agy as a universal reader, but agy 1.5.9 does not discover these global packages there. After installing, run this from a checkout of this repository:
+
+```bash
+python3 scripts/link-agy-skills.py --apply
+```
+
+This links only packages owned by `ryangriffinau/skills` into `~/.gemini/antigravity-cli/skills`. It refuses conflicting files or links and leaves other collections alone. Omit `--apply` for a read-only check. Repeat it after installing newly added skills; existing links follow package updates.
 
 See [installation and migration](docs/specs/skills-distribution/INSTALLATION.md) for verification, backup locations, and cleanup of older installations.
 
@@ -68,7 +76,7 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 
 | Skill | Status | Version | Purpose |
 |---|---|---|---|
-| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.7.0 | Save portable `p-*` skills with verbatim bodies, publish them, and verify installation |
+| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.7.1 | Save portable `p-*` skills with verbatim bodies, publish them, and verify installation |
 | [codebase-benchmark](skills/engineering/codebase-benchmark) | ⚪ | 0.2.0 | Produce a whole-codebase scorecard with evidence and trends across reviews |
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | Create conventional commits scoped to current-session work |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | Split the full working-tree diff into atomic conventional commits |
@@ -100,6 +108,7 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 | [teach-me-nugget](skills/meta/teach-me-nugget) | ⚪ | 0.1.0 | Explain a concept from current work with concrete examples and usable heuristics |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | Port an existing website while preserving SEO, appearance, and cutover safety |
 | [write-goal](skills/planning/write-goal) | ⚪ | 0.4.0 | Turn an ambition into a verifiable goal and execution plan |
+| [write-like-me](skills/comms/write-like-me) | ⚪ | 0.1.0 | Draft in your own voice from a voice file that learns from every edit and every sent version |
 | [write-project-update](skills/comms/write-project-update) | 🟡 | 0.10.1 | Write an evidence-grounded customer, public, or internal project update |
 
 See the [retirement and rename index](deprecated/README.md) for older names. Archived entrypoints use `RETIRED.md` so recursive discovery does not reinstall them. Preserve local edits and verify ownership before removing an old installation.
