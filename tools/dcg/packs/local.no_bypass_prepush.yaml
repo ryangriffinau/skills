@@ -1,6 +1,6 @@
 id: local.no_bypass_prepush
 name: No Silent Bypass of Verify Hooks
-version: 1.0.0
+version: 1.0.1
 description: >
   Blocks agent-side bypass of the repo's git verify hooks (Ryan, 2026-07-24).
   The tracked pre-push hook runs the CI-equivalent gate (lint + typecheck +
@@ -20,7 +20,7 @@ destructive_patterns:
       --no-verify skips the pre-push hook, which runs lint + typecheck + test.
       While CI is billing-blocked this hook is the only gate stopping red code
       from being pushed.
-    message: >
+    denial_trailer: >-
       Blocked: bypassing the pre-push verify gate is not allowed for agents.
       Fix what `bun run verify` reports. If a skip is genuinely required, ask
       Ryan to run: dcg allow-once local.no_bypass_prepush:git-push-no-verify
@@ -30,7 +30,7 @@ destructive_patterns:
     explanation: >
       SKIP_PREPUSH_VERIFY=1 is the pre-push hook's built-in escape hatch; it
       skips the lint/typecheck/test gate entirely.
-    message: >
+    denial_trailer: >-
       Blocked: the SKIP_PREPUSH_VERIFY escape hatch is for explicit human use
       only. Ask Ryan to run it, or dcg allow-once
       local.no_bypass_prepush:skip-prepush-verify-env for one push.
@@ -40,7 +40,7 @@ destructive_patterns:
     explanation: >
       --no-verify / -n skips the pre-commit hook (Biome auto-format + UBS bug
       scan), letting unformatted or flagged code into a commit.
-    message: >
+    denial_trailer: >-
       Blocked: bypassing the pre-commit gate is not allowed for agents. If a
       skip is genuinely required, ask Ryan to run: dcg allow-once
       local.no_bypass_prepush:git-commit-no-verify

@@ -1,6 +1,6 @@
 id: local.agent_loop_guard
 name: Agent Loop Skill Guard
-version: 1.0.0
+version: 1.0.1
 description: >
   Requires Ryan's explicit approval before an agent starts a LOOP SKILL in
   another agent (Ryan ruling, 2026-08-23, during flywheel conducting). The
@@ -29,7 +29,7 @@ destructive_patterns:
       The delimiter classes around /loop keep paths like src/loop.ts and
       docs/loop/x.md from matching; only the skill-invocation token shape
       does.
-    message: >
+    denial_trailer: >-
       Blocked: starting a loop skill in an agent needs Ryan's explicit
       approval (ruling 2026-08-23). Flywheel conducting uses the mechanical
       tick, not agent-side /loop. Approve only if Ryan sanctioned this exact
@@ -42,7 +42,7 @@ destructive_patterns:
       token types a loop-skill invocation into a pane that is running an
       agent. Buffer loads from files are invisible to this rule and are
       recorded in known-gaps.
-    message: >
+    denial_trailer: >-
       Blocked: typing /loop into an agent pane needs Ryan's explicit
       approval (ruling 2026-08-23). Dispatch bead briefs, not loop skills.
 safe_patterns: []

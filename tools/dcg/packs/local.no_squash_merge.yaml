@@ -1,6 +1,6 @@
 id: local.no_squash_merge
 name: Squash Merge Ban
-version: 1.1.0
+version: 1.1.1
 description: >
   Hard ban on squash merging (Ryan, 2026-07-07). Squash merges destroy commit
   ancestry: per-bead atomic commits, authorship, and evidence trails collapse
@@ -19,7 +19,7 @@ destructive_patterns:
       --squash collapses a branch's commit history into a single staged
       change, discarding ancestry, per-commit context, and cross-branch
       merge-base information.
-    message: >
+    denial_trailer: >-
       Blocked: squash merging is banned (global policy). Use a merge commit
       (git merge <branch>) to preserve commit ancestry and evidence trails.
   - name: gh-pr-merge-squash
@@ -29,7 +29,7 @@ destructive_patterns:
       Squash-merging a PR erases the branch's commit graph on the base
       branch, causing phantom conflicts on subsequent merges from the same
       workstream branch and destroying per-commit review evidence.
-    message: >
+    denial_trailer: >-
       Blocked: squash merging is banned (global policy). Merge PRs with a
       merge commit: gh pr merge <n> --merge.
   - name: gh-api-merge-method-squash
@@ -38,7 +38,7 @@ destructive_patterns:
     explanation: >
       API-level squash merge — same ancestry destruction as gh pr merge
       --squash, via the REST/GraphQL escape hatch.
-    message: >
+    denial_trailer: >-
       Blocked: squash merging is banned (global policy), including via the
       GitHub API. Use merge_method=merge.
 safe_patterns: []
