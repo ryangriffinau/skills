@@ -5,7 +5,7 @@ read_when: Installing this collection, verifying prompt migration, or recovering
 
 # Native skill installation
 
-All 33 published workflows are packages under `skills/`. The 18 former files in
+All 34 published workflows are packages under `skills/`. The 18 former files in
 `prompts/` moved without changing their bodies. Their `p-` names remain the same.
 [migrations.json](../../../migrations.json) records each move and the original
 body hash. Git preserves the original files; no duplicate prompt archive is needed.
@@ -27,9 +27,16 @@ The [README](../../../README.md) provides the complete reinstall command using
 | Claude Code | `claude-code` | `~/.claude/skills` |
 | Antigravity CLI (agy) | `antigravity-cli` | `~/.gemini/antigravity-cli/skills` |
 
-The public installer writes the canonical package and provider links. It owns
+The public installer writes the canonical package and Claude links. It owns
 `~/.agents/.skill-lock.json`. An absent legacy Codex link is fine when Codex
 discovers the universal package. `antigravity` is the editor target, not agy.
+
+Live verification found that CLI 1.7.1 skips agy's global links because it treats
+agy as a universal reader. agy 1.5.9 still requires its own global directory.
+Run `python3 scripts/link-agy-skills.py --apply` from this repo after installation.
+The helper reads installer ownership, checks all targets first, and creates only
+missing links for this collection. Without `--apply`, it reports gaps without
+changing anything. It refuses conflicting files or links.
 
 Before reinstalling, compare complete installed packages with their recorded
 source. Back up local changes, provider links, and lock metadata outside all
@@ -66,9 +73,10 @@ lock metadata. `provider-before.json` records ownership and unrelated-file
 hashes for comparison. Retired links are moved there after native verification.
 
 Use those backups to recover a specific local edit. Do not restore an entire
-old global lock over later installations from other sources. The unpublished
-`write-like-me` and `claude-session-sharing` work remains local and is excluded
-from the published collection and reinstall.
+old global lock over later installations from other sources. A concurrent session
+published `write-like-me` during this migration, bringing the collection from 33
+to 34 native packages; the final reinstall includes it. `claude-session-sharing`
+contains a published script but has no `SKILL.md`, so it is not an installable skill.
 
 ## Updated runtime findings
 

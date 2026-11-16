@@ -1,7 +1,7 @@
 ---
 name: add-prompt
 status: drafting
-version: 0.7.0
+version: 0.7.1
 tags: [meta, prompts, tooling]
 updated: 2026-11-16
 description: Save a reusable instruction as a portable p-prefixed skill for Claude Code, Codex, and Antigravity CLI (agy). Use when the user asks to add a prompt, save an instruction, or grow their prompt library. Preserve user-provided wording verbatim, publish the source, install it, and verify discovery.
@@ -58,7 +58,9 @@ second source or a provider command copy for the same instruction.
    need a new chat or reload; do not claim to have observed an untested picker.
 
 Antigravity CLI uses the installer target `antigravity-cli`; `antigravity` targets
-the editor instead. Verify the actual runtime and its skill directory. Retire
+the editor instead. Follow README's agy compatibility-link step after installing:
+CLI 1.7.1 does not create the global links needed by agy 1.5.9. Verify the actual
+runtime and its skill directory. Retire
 known legacy command bridges only after native discovery succeeds, preserving
 unrelated commands and any local changes outside discovery directories.
 

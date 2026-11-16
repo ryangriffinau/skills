@@ -77,6 +77,7 @@ jobs:
           set -euo pipefail
           bash tests/lint-skills.test.sh
           bash tests/skill-distribution.test.sh
+          python3 tests/link-agy-skills.test.py
 
       - name: Enforce skill version bumps
         if: github.event_name == 'pull_request'
