@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# claude-sessions-link — make one Claude desktop Code-tab session list visible
+# under every local Claude account on this machine.
+#
+# The app indexes Code-tab sessions at
+#   ~/Library/Application Support/Claude/claude-code-sessions/<accountUuid>/<orgUuid>/
+# Transcripts themselves live in ~/.claude/projects/<cwd-slug>/<sessionId>.jsonl,
+# which is NOT account-scoped. So the only thing an account switch loses is the
+# index. Point every identity's index path at one master directory and the whole
+# list — titles, cwd, model, PR bindings, archive state — follows you across
+# accounts, and every session stays resumable.
+#
+# Design rule: additive only. One identity keeps the real directory; the others
+# become symlinks to it. Nothing that holds session records is ever deleted.
+
+set -euo pipefail
+
+SESSIONS_BASE="$HOME/Library/Application Support/Claude/claude-code-sessions"
+AGENTMODE_BASE="$HOME/Library/Application Support/Claude/local-agent-mode-sessions"
+
+UUID='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+UUID_PAIR_RE="^${UUID}/${UUID}$"
+
+BASES=("$SESSIONS_BASE")
+MASTER=""
+DRY_RUN=0
+MERGE=0
+
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+note() { printf '%s\n' "$*"; }
+run() {
+  if [ "$DRY_RUN" = 1 ]; then printf '  would run: %s\n' "$*"; else eval "$*"; fi
+}
+
+usage() {
+  cat <<'HELP_EOF'
+claude-sessions-link — share the Claude Code session list across local accounts
+
+USAGE
+  claude-sessions-link status [--agent-mode]
+  claude-sessions-link link   [--master <acct>/<org>] [--merge] [--dry-run] [--agent-mode]
+  claude-sessions-link detach <acct>/<org> [--agent-mode]
+
+COMMANDS
+  status   List every account/org identity the app has created, how many session
+           records each holds, and whether it is a real directory or a symlink.
+  link     Point every identity at the master identity's directory. The master
+           keeps its real directory; the rest become relative symlinks to it.
+  detach   Turn one symlinked identity back into an independent real copy.
+
+OPTIONS
+  --master <acct>/<org>  Choose the master explicitly. Default: the identity
+                         holding the most session records.
+  --merge                If a non-master identity already holds records, copy
+                         them into the master first (cp -n, never overwrites).
+  --dry-run              Print what would change; touch nothing.
+  --agent-mode           Operate on local-agent-mode-sessions as well.
+
+WORKFLOW
+  1. claude-sessions-link status          # note the master
+  2. Sign in to the other account in the Claude app once, so its identity
+     directory gets created. Quit the app.
+  3. claude-sessions-link link
+  4. Reopen the app. The full session list is there under both accounts.
+
+  Re-run `link` after adding any further account, and after a Claude Code
+  update (run `status` to confirm the layout still matches).
+HELP_EOF
+}
+
+# Emit "acct/org<TAB>kind<TAB>record_count<TAB>link_target" for each identity.
+identities() {
+  local base="$1" path id kind count target prefix
+  [ -d "$base" ] || return 0
+  prefix="$base/"
+  while IFS= read -r path; do
+    id="${path#$prefix}"
+    # Only <uuid>/<uuid> pairs are real account identities. local-agent-mode-sessions
+    # also holds pseudo-identities such as "skills-plugin/<org>", which are not
+    # accounts and must never be linked.
+    if ! printf '%s' "$id" | grep -Eq "$UUID_PAIR_RE"; then continue; fi
+    if [ -L "$path" ]; then kind=symlink; target="$(readlink "$path")"; else kind=dir; target="-"; fi
+    count="$(find -L "$path" -maxdepth 1 -name 'local_*.json' 2>/dev/null | wc -l | tr -d ' ')"
+    printf '%s\t%s\t%s\t%s\n' "$id" "$kind" "$count" "$target"
+  done < <(find "$base" -mindepth 2 -maxdepth 2 \( -type d -o -type l \) | sort)
+}
+
+cmd_status() {
+  local base found
+  for base in "${BASES[@]}"; do
+    note ""
+    note "$base"
+    if [ ! -d "$base" ]; then note "  (does not exist)"; continue; fi
+    found=0
+    while IFS=$'\t' read -r id kind count target; do
+      found=1
+      if [ "$kind" = symlink ]; then
+        printf '  %-75s  %4s records  -> %s\n' "$id" "$count" "$target"
+      else
+        printf '  %-75s  %4s records  (master candidate)\n' "$id" "$count"
+      fi
+    done < <(identities "$base")
+    [ "$found" = 1 ] || note "  (no identities yet)"
+  done
+  note ""
+}
+
+# Pick the real directory holding the most records. Refuse to guess when two
+# real directories both hold records — that is a merge decision, not ours.
+pick_master() {
+  local base="$1" best="" best_n=-1 contenders=0
+  while IFS=$'\t' read -r id kind count _; do
+    [ "$kind" = dir ] || continue
+    if [ "$count" -gt 0 ]; then contenders=$((contenders + 1)); fi
+    if [ "$count" -gt "$best_n" ]; then best_n="$count"; best="$id"; fi
+  done < <(identities "$base")
+  [ -n "$best" ] || die "no identities under $base — sign in to the app at least once"
+  if [ "$contenders" -gt 1 ]; then
+    die "two or more identities hold session records; pick one with --master (see: status)"
+  fi
+  printf '%s' "$best"
+}
+
+link_base() {
+  local base="$1" master master_path id kind count target rel depth i
+  [ -d "$base" ] || { note "skip (missing): $base"; return 0; }
+
+  if [ -n "$MASTER" ]; then master="$MASTER"; else master="$(pick_master "$base")"; fi
+  master_path="$base/$master"
+  [ -d "$master_path" ] || die "master is not a directory: $master_path"
+  if [ -L "$master_path" ]; then die "master is itself a symlink: $master_path"; fi
+
+  note ""
+  note "base:   $base"
+  note "master: $master"
+
+  # The symlink is created AT <base>/<acct>/<org>, so a relative target resolves
+  # from its containing directory <base>/<acct>. One ".." reaches <base>, and
+  # "$master" is already "<acct>/<org>". Relative keeps the tree portable if the
+  # home directory ever moves.
+  rel="../$master"
+
+  while IFS=$'\t' read -r id kind count target; do
+    [ "$id" = "$master" ] && continue
+    if [ "$kind" = symlink ]; then
+      if [ "$target" = "$rel" ]; then
+        note "  ok       $id (already linked)"
+      else
+        note "  WARNING  $id is a symlink to '$target', not the master; leaving alone"
+      fi
+      continue
+    fi
+
+    if [ "$count" -gt 0 ]; then
+      if [ "$MERGE" = 1 ]; then
+        note "  merge    $id ($count records) -> master, without overwriting"
+        run "cp -an \"$base/$id\"/. \"$master_path\"/"
+      else
+        note "  SKIP     $id holds $count records; re-run with --merge to fold them in"
+        continue
+      fi
+    fi
+
+    # Only ever remove an empty directory. Anything else is the user's call.
+    if [ -n "$(ls -A "$base/$id" 2>/dev/null)" ]; then
+      note "  SKIP     $id is not empty after merge; remove it yourself, then re-run:"
+      note "             rm -rf \"$base/$id\" && claude-sessions-link link"
+      continue
+    fi
+
+    note "  link     $id -> $rel"
+    run "rmdir \"$base/$id\""
+    run "ln -s \"$rel\" \"$base/$id\""
+  done < <(identities "$base")
+
+  # Verify: every symlinked identity must resolve to the master and see it.
+  if [ "$DRY_RUN" = 0 ]; then
+    local n_master n_seen
+    n_master="$(find "$master_path" -maxdepth 1 -name 'local_*.json' | wc -l | tr -d ' ')"
+    while IFS=$'\t' read -r id kind count target; do
+      [ "$kind" = symlink ] || continue
+      [ "$target" = "$rel" ] || continue
+      n_seen="$(find -L "$base/$id" -maxdepth 1 -name 'local_*.json' | wc -l | tr -d ' ')"
+      if [ "$n_seen" = "$n_master" ]; then
+        note "  verified $id sees $n_seen records"
+      else
+        note "  FAILED   $id sees $n_seen records, master has $n_master"
+      fi
+    done < <(identities "$base")
+  fi
+}
+
+cmd_link() {
+  local base
+  for base in "${BASES[@]}"; do link_base "$base"; done
+  note ""
+  note "Quit and reopen the Claude app for the sidebar to pick this up."
+}
+
+cmd_detach() {
+  local id="${1:-}" base path resolved
+  [ -n "$id" ] || die "detach needs an identity: <accountUuid>/<orgUuid>"
+  for base in "${BASES[@]}"; do
+    path="$base/$id"
+    if [ ! -L "$path" ]; then note "not a symlink, skipping: $path"; continue; fi
+    # Resolve while the link still exists, then rebuild as a real directory.
+    # Removing a symlink never touches the master's records.
+    resolved="$(cd "$(dirname "$path")" && cd "$(readlink "$path")" && pwd)"
+    [ -d "$resolved" ] || die "symlink target does not resolve: $path"
+    note "restoring independent copy: $path"
+    note "  source: $resolved"
+    run "rm \"$path\""
+    run "mkdir -p \"$path\""
+    run "cp -a \"$resolved\"/. \"$path\"/"
+  done
+  note "Done. That account now has its own session list again."
+}
+
+main() {
+  local cmd="${1:-status}"; shift || true
+  local positional=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --master) MASTER="${2:-}"; shift 2 ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      --merge) MERGE=1; shift ;;
+      --agent-mode) BASES=("$SESSIONS_BASE" "$AGENTMODE_BASE"); shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*) die "unknown option: $1" ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  case "$cmd" in
+    status) cmd_status ;;
+    link) cmd_link ;;
+    detach) cmd_detach "${positional[0]:-}" ;;
+    -h|--help|help) usage ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+main "$@"
