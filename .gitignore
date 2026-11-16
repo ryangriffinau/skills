@@ -15,3 +15,6 @@ skills-lock.json
 
 # Claude Code per-machine local settings (settings.json is the shared one)
 .claude/settings.local.json
+
+# Project-level skill links created by the skills CLI; they point into .agents/
+.claude/skills/
