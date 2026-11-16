@@ -1,6 +1,0 @@
-interface:
-  display_name: "p-agent-5-hour-trigger"
-  short_description: "Schedule a quick 5-hourly check from a terminal CLI"
-  default_prompt: "Use $p-agent-5-hour-trigger to schedule my 5-hour trigger."
-policy:
-  allow_implicit_invocation: false

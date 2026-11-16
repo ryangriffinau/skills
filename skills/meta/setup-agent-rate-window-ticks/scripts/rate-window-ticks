@@ -1,0 +1,1068 @@
+#!/usr/bin/env bash
+# Rate window ticks are quick model calls at fixed times that start a
+# provider's usage window at a known time. This script finds the agent host,
+# reads usage windows and models where the host exposes them, prints the
+# settings for the provider's cloud scheduler, and manages the local job that
+# is used only when no cloud scheduler is available.
+set -euo pipefail
+
+TICK_NAME="agent-rate-window-ticks"
+LEGACY_NAME="agent-5-hour-trigger"
+HOSTS="claude codex agy"
+DEFAULT_TZ="Australia/Melbourne"
+DEFAULT_TIMES="00:07,05:07,10:07,15:07,20:07"
+DEFAULT_WEEKDAY="mon"
+DEFAULT_WEEKLY_TIME="00:07"
+TICK_PROMPT="Quickly check in and reply with OK. Do nothing else."
+RUN_TIMEOUT_SECONDS=300
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}"
+STATE_DIR="$STATE_ROOT/$TICK_NAME"
+
+usage() {
+  cat <<'USAGE'
+usage: rate-window-ticks <command> [options]
+
+commands:
+  check
+      Report the agent host, its surface, the provider's cloud scheduler, and
+      whether this surface can create the cloud tick itself.
+  windows --host HOST
+      Report the usage windows and the cadence to use: 5h when the plan has a
+      5-hour window, weekly otherwise. Codex is read live, Claude Code
+      defaults to 5h, and agy depends on the plan it shows at startup.
+  models --host HOST [--model-hint TEXT] [--group gemini|claude-gpt]
+      Find the model the CLI offers that matches a hint such as
+      "GPT Sol or equivalent".
+  plan --host HOST [SCHEDULE] [--model-hint TEXT] [--group gemini|claude-gpt]
+      Print the tick settings: name, prompt, model hint, times, cron with
+      CRON_TZ, UTC cron and RRULE.
+  install --host HOST [SCHEDULE] [--model ID] [--dry-run] [--replace]
+      Last resort: install a local job (launchd on macOS, crontab on Linux)
+      that runs the host CLI at the tick times. It also removes a job left
+      under the old agent-5-hour-trigger name. An installed job is left alone
+      unless --replace.
+  uninstall --host HOST [--dry-run]
+      Remove the local job and any job left under the old name. Logs are kept.
+  status [--host HOST]
+      Show the local job state and recent log lines.
+  classify PATH ARGS
+      Print the agent and surface for one process path and argument string.
+
+HOST is claude, codex or agy. SCHEDULE options:
+  --cadence 5h|weekly          default 5h
+  --times HH:MM,...            5h times, default 00:07,05:07,10:07,15:07,20:07
+  --weekday DAY --time HH:MM   weekly tick, default mon 00:07
+  --tz ZONE                    default Australia/Melbourne
+
+check exit codes: 0 agent found, 4 no agent found, 5 a sandbox blocked the
+check (rerun it outside the sandbox).
+RATE_WINDOW_TICKS_START_PID sets where the process ancestry walk starts.
+USAGE
+}
+
+fail() {
+  echo "rate-window-ticks: error: $*" >&2
+  exit 2
+}
+
+# ---------- hosts ----------
+# To add a host: teach agent_kind its process name, then give it a model hint,
+# a cloud method and a local command.
+
+default_model_hint() {
+  case "$1:$2" in
+    claude:*) echo "Sonnet or equivalent" ;;
+    codex:*) echo "GPT Sol or equivalent" ;;
+    agy:claude-gpt) echo "Claude Sonnet or equivalent" ;;
+    agy:*) echo "Gemini Flash or equivalent" ;;
+  esac
+}
+
+# The provider's cloud scheduler for each host.
+cloud_method() {
+  case "$1" in
+    claude) echo routine ;;
+    codex) echo chatgpt-scheduled-task ;;
+    agy) echo remote-agent-schedule ;;
+    *) echo none ;;
+  esac
+}
+
+# yes when an agent on this surface can create the cloud tick itself.
+cloud_from_here() {
+  case "$1:$2" in
+    claude:cli|claude:desktop|claude:web|claude:ide) echo yes ;;
+    codex:desktop) echo yes ;;
+    claude:*|codex:sandboxed) echo unknown ;;
+    *) echo no ;;
+  esac
+}
+
+host_trigger_command() {
+  local host="$1" bin="$2" model="$3"
+  local -a cmd=("$bin")
+  case "$host" in
+    claude)
+      cmd+=(-p "$TICK_PROMPT")
+      if [ -n "$model" ]; then cmd+=(--model "$model"); fi
+      ;;
+    codex)
+      cmd+=(exec)
+      if [ -n "$model" ]; then cmd+=(-m "$model"); fi
+      cmd+=(-c 'model_reasoning_effort="low"' --skip-git-repo-check --ephemeral --sandbox read-only "$TICK_PROMPT")
+      ;;
+    agy)
+      if [ -n "$model" ]; then cmd+=(--model "$model"); fi
+      cmd+=(--effort low -p "$TICK_PROMPT")
+      ;;
+    *) fail "no local command for $host" ;;
+  esac
+  printf '%q ' "${cmd[@]}"
+}
+
+# Print claude, codex or agy when a process is one of those agents.
+agent_kind() {
+  local exe_base="${1##*/}" first="${2%% *}" first_base name
+  first_base="${first##*/}"
+  for name in "$exe_base" "$first_base"; do
+    case "$name" in
+      claude|codex|agy)
+        echo "$name"
+        return 0
+        ;;
+    esac
+  done
+}
+
+# Print cli, desktop or ide for an agent process path and arguments.
+classify_surface() {
+  local exe="$1" args="$2"
+  case "$exe $args" in
+    *"/.vscode/extensions/"*|*"/.vscode-server/"*|*"/.cursor/extensions/"*|*"/.cursor-server/"*|*"/.windsurf/extensions/"*|*"/.antigravity/extensions/"*|*"/JetBrains/"*)
+      echo ide
+      return 0
+      ;;
+    *".app/Contents/"*)
+      echo desktop
+      return 0
+      ;;
+  esac
+  case " $args " in
+    *" app-server "*) echo desktop ;;
+    *" acp "*|*" --acp "*|*" --experimental-acp "*) echo ide ;;
+    *) echo cli ;;
+  esac
+}
+
+# ---------- process inspection ----------
+
+can_inspect_processes() {
+  [ -r /proc/self/status ] && return 0
+  ps -o pid= -p "$$" >/dev/null 2>&1
+}
+
+proc_exe() {
+  local pid="$1" exe=""
+  if [ -L "/proc/$pid/exe" ]; then
+    exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+  fi
+  if [ -z "$exe" ]; then
+    exe="$(ps -o comm= -p "$pid" 2>/dev/null | sed 's/^[[:space:]]*//' || true)"
+  fi
+  printf '%s\n' "$exe"
+}
+
+proc_args() {
+  if [ -r "/proc/$1/cmdline" ]; then
+    tr '\0' ' ' <"/proc/$1/cmdline" | sed 's/ $//'
+    echo
+  else
+    ps -o args= -p "$1" 2>/dev/null | sed 's/^[[:space:]]*//' || true
+  fi
+}
+
+proc_ppid() {
+  if [ -r "/proc/$1/status" ]; then
+    sed -n 's/^PPid:[[:space:]]*//p' "/proc/$1/status"
+  else
+    ps -o ppid= -p "$1" 2>/dev/null | tr -d '[:space:]' || true
+  fi
+}
+
+proc_tty() {
+  ps -o tty= -p "$1" 2>/dev/null | tr -d '[:space:]' || true
+}
+
+cmd_classify() {
+  [ "$#" -eq 2 ] || fail "classify needs PATH and ARGS"
+  local kind
+  kind="$(agent_kind "$1" "$2")"
+  echo "agent=${kind:-none}"
+  if [ -n "$kind" ]; then
+    echo "surface=$(classify_surface "$1" "$2")"
+  fi
+}
+
+cmd_check() {
+  local pid="${RATE_WINDOW_TICKS_START_PID:-$PPID}" depth=0 inspection="ok"
+  local exe args kind=""
+  local tree_host="" tree_surface="" agent_pid="" agent_exe="" agent_tty=""
+  local host="unknown" surface="unknown"
+
+  # The nearest agent process in this command's ancestry is the host.
+  if can_inspect_processes; then
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 50 ]; do
+      exe="$(proc_exe "$pid")"
+      args="$(proc_args "$pid")"
+      kind="$(agent_kind "$exe" "$args")"
+      if [ -n "$kind" ]; then
+        tree_host="$kind"
+        tree_surface="$(classify_surface "$exe" "$args")"
+        agent_pid="$pid"
+        agent_exe="$exe"
+        agent_tty="$(proc_tty "$pid")"
+        break
+      fi
+      pid="$(proc_ppid "$pid")"
+      depth=$((depth + 1))
+    done
+  else
+    inspection="blocked"
+  fi
+
+  # Without a process match, use the markers each host sets for the commands
+  # it runs. Codex sets CODEX_SANDBOX for sandboxed commands, where ps is
+  # blocked. It is checked before Claude's markers, which leak into processes
+  # started from a Claude session.
+  if [ -n "$tree_host" ]; then
+    host="$tree_host"
+  elif [ -n "${CODEX_SANDBOX:-}" ]; then
+    host="codex"
+  elif [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]; then
+    host="claude"
+  fi
+
+  case "$host" in
+    claude)
+      if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+        surface="web"
+      else
+        case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+          cli|sdk-cli) surface="cli" ;;
+          claude-desktop) surface="desktop" ;;
+          claude-vscode|*jetbrains*|*ide*) surface="ide" ;;
+          "") surface="${tree_surface:-unknown}" ;;
+          *) surface="other" ;;
+        esac
+      fi
+      ;;
+    codex)
+      surface="${tree_surface:-sandboxed}"
+      ;;
+    agy)
+      surface="${tree_surface:-unknown}"
+      ;;
+  esac
+
+  # A non-CLI process path overrides an environment that claims a CLI.
+  if [ "$host" = "$tree_host" ] && [ -n "$tree_surface" ] && [ "$tree_surface" != "cli" ]; then
+    surface="$tree_surface"
+  fi
+
+  echo "host=$host"
+  echo "surface=$surface"
+  echo "process_inspection=$inspection"
+  if [ "$host" != "unknown" ]; then
+    echo "cloud_method=$(cloud_method "$host")"
+    echo "cloud_from_here=$(cloud_from_here "$host" "$surface")"
+  fi
+  if [ "$host" = "claude" ]; then
+    echo "claude_entrypoint=${CLAUDE_CODE_ENTRYPOINT:-}"
+  fi
+  if [ -n "$agent_pid" ]; then
+    echo "agent_pid=$agent_pid"
+    echo "agent_path=$agent_exe"
+    echo "agent_tty=${agent_tty:-none}"
+  fi
+
+  if [ "$surface" = "sandboxed" ] || { [ "$host" = "unknown" ] && [ "$inspection" = "blocked" ]; }; then
+    echo "rate-window-ticks: a sandbox blocked the process check; rerun it outside the sandbox" >&2
+    return 5
+  fi
+  if [ "$host" = "unknown" ]; then
+    echo "rate-window-ticks: no Claude Code, Codex or Antigravity CLI session found" >&2
+    return 4
+  fi
+  return 0
+}
+
+# ---------- options and schedule ----------
+
+# Sets HOST, DRY_RUN, REPLACE, CADENCE, TIMES, WEEKDAY, WTIME, TZONE, MODEL,
+# MODEL_HINT and GROUP. ALLOWED lists the hosts this command takes.
+parse_args() {
+  local allowed="$1"
+  shift
+  HOST=""
+  DRY_RUN=0
+  REPLACE=0
+  CADENCE="5h"
+  TIMES="$DEFAULT_TIMES"
+  WEEKDAY="$DEFAULT_WEEKDAY"
+  WTIME="$DEFAULT_WEEKLY_TIME"
+  TZONE="$DEFAULT_TZ"
+  MODEL=""
+  MODEL_HINT=""
+  GROUP="gemini"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --host|--cadence|--times|--weekday|--time|--tz|--model|--model-hint|--group)
+        [ "$#" -ge 2 ] || fail "missing value for $1"
+        case "$1" in
+          --host) HOST="$2" ;;
+          --cadence) CADENCE="$2" ;;
+          --times) TIMES="$2" ;;
+          --weekday) WEEKDAY="$2" ;;
+          --time) WTIME="$2" ;;
+          --tz) TZONE="$2" ;;
+          --model) MODEL="$2" ;;
+          --model-hint) MODEL_HINT="$2" ;;
+          --group) GROUP="$2" ;;
+        esac
+        shift 2
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      --replace)
+        REPLACE=1
+        shift
+        ;;
+      *) fail "unknown argument: $1" ;;
+    esac
+  done
+  case " $allowed " in
+    *" $HOST "*) ;;
+    *) fail "--host must be one of: $allowed" ;;
+  esac
+  case "$CADENCE" in
+    5h|weekly) ;;
+    *) fail "--cadence must be 5h or weekly" ;;
+  esac
+  case "$GROUP" in
+    gemini|claude-gpt) ;;
+    *) fail "--group must be gemini or claude-gpt" ;;
+  esac
+  if [ -z "$MODEL_HINT" ]; then
+    MODEL_HINT="$(default_model_hint "$HOST" "$GROUP")"
+  fi
+}
+
+# Print "HOUR MINUTE" for HH:MM.
+parse_hhmm() {
+  local t="$1" h m
+  case "$t" in
+    [0-9]:[0-5][0-9]) t="0$t" ;;
+    [0-2][0-9]:[0-5][0-9]) ;;
+    *) fail "time must be HH:MM: $1" ;;
+  esac
+  h=$((10#${t%%:*}))
+  m=$((10#${t##*:}))
+  [ "$h" -le 23 ] || fail "time out of range: $1"
+  echo "$h $m"
+}
+
+# Sets HOURS (space separated), MINUTE, and for weekly DOW (0 is Sunday).
+load_schedule() {
+  local t hm h seen=" "
+  local -a list
+  HOURS=""
+  MINUTE=""
+  DOW=""
+  if [ "$CADENCE" = "5h" ]; then
+    IFS=, read -r -a list <<<"$TIMES"
+    [ "${#list[@]}" -gt 0 ] || fail "--times is empty"
+    for t in "${list[@]}"; do
+      hm="$(parse_hhmm "$t")"
+      h="${hm% *}"
+      if [ -z "$MINUTE" ]; then
+        MINUTE="${hm#* }"
+      elif [ "${hm#* }" -ne "$MINUTE" ]; then
+        fail "all --times must share one minute"
+      fi
+      case "$seen" in
+        *" $h "*) fail "duplicate hour in --times: $t" ;;
+      esac
+      seen="$seen$h "
+      HOURS="$HOURS $h"
+    done
+    # shellcheck disable=SC2086 # split the hour list on purpose
+    HOURS="$(printf '%s\n' $HOURS | sort -n | paste -sd' ' -)"
+  else
+    hm="$(parse_hhmm "$WTIME")"
+    HOURS="${hm% *}"
+    MINUTE="${hm#* }"
+    case "$(printf '%s' "$WEEKDAY" | tr '[:upper:]' '[:lower:]')" in
+      sun|sunday) DOW=0 ;;
+      mon|monday) DOW=1 ;;
+      tue|tuesday) DOW=2 ;;
+      wed|wednesday) DOW=3 ;;
+      thu|thursday) DOW=4 ;;
+      fri|friday) DOW=5 ;;
+      sat|saturday) DOW=6 ;;
+      *) fail "--weekday must be mon, tue, wed, thu, fri, sat or sun" ;;
+    esac
+  fi
+}
+
+# Without zone data, TZ=Australia/Melbourne silently means UTC.
+require_zone() {
+  local dir
+  for dir in "${TZDIR:-}" /usr/share/zoneinfo /usr/lib/zoneinfo /usr/share/lib/zoneinfo /var/db/timezone/zoneinfo; do
+    if [ -n "$dir" ] && [ -f "$dir/$TZONE" ]; then
+      return 0
+    fi
+  done
+  fail "time zone data for $TZONE not found; install tzdata"
+}
+
+offset_minutes() {
+  local z="$1" sign=1 h m
+  case "$z" in -*) sign=-1 ;; esac
+  z="${z#[+-]}"
+  h="${z%??}"
+  m="${z#??}"
+  echo $((sign * (10#$h * 60 + 10#$m)))
+}
+
+hour_csv() {
+  printf '%s' "$HOURS" | tr -s ' ' ','
+}
+
+day_abbrev() {
+  case "$DOW" in
+    0) echo sun ;;
+    1) echo mon ;;
+    2) echo tue ;;
+    3) echo wed ;;
+    4) echo thu ;;
+    5) echo fri ;;
+    6) echo sat ;;
+  esac
+}
+
+rrule_day() {
+  case "$DOW" in
+    0) echo SU ;;
+    1) echo MO ;;
+    2) echo TU ;;
+    3) echo WE ;;
+    4) echo TH ;;
+    5) echo FR ;;
+    6) echo SA ;;
+  esac
+}
+
+schedule_summary() {
+  local h out=""
+  if [ "$CADENCE" = "5h" ]; then
+    for h in $HOURS; do
+      out="$out $(printf '%02d:%02d' "$h" "$MINUTE")"
+    done
+    echo "${out# }"
+  else
+    printf '%s %02d:%02d\n' "$(day_abbrev)" "$HOURS" "$MINUTE"
+  fi
+}
+
+cron_tz() {
+  if [ "$CADENCE" = "5h" ]; then
+    echo "CRON_TZ=$TZONE $MINUTE $(hour_csv) * * *"
+  else
+    echo "CRON_TZ=$TZONE $MINUTE $HOURS * * $DOW"
+  fi
+}
+
+# The same times as a UTC cron at the zone's current offset. It drifts by an
+# hour when daylight saving changes, unlike the CRON_TZ form.
+utc_cron() {
+  local off h total minute=0 hours=""
+  off="$(offset_minutes "$(TZ="$TZONE" date +%z)")"
+  if [ "$CADENCE" = "5h" ]; then
+    for h in $HOURS; do
+      total=$((((h * 60 + MINUTE - off) % 1440 + 1440) % 1440))
+      minute=$((total % 60))
+      hours="$hours $((total / 60))"
+    done
+    hours="$(printf '%s\n' "$hours" | tr -s ' ' '\n' | sed '/^$/d' | sort -n | paste -sd, -)"
+    echo "$minute $hours * * *"
+  else
+    total=$((((DOW * 1440 + HOURS * 60 + MINUTE - off) % 10080 + 10080) % 10080))
+    echo "$((total % 60)) $(((total % 1440) / 60)) * * $((total / 1440))"
+  fi
+}
+
+rrule() {
+  if [ "$CADENCE" = "5h" ]; then
+    echo "RRULE:FREQ=DAILY;BYHOUR=$(hour_csv);BYMINUTE=$MINUTE"
+  else
+    echo "RRULE:FREQ=WEEKLY;BYDAY=$(rrule_day);BYHOUR=$HOURS;BYMINUTE=$MINUTE"
+  fi
+}
+
+# The local minute that matches the tick minute in the tick zone. DST shifts
+# are whole hours, so this minute holds all year; the runner gates on the hour.
+local_minute() {
+  local here there
+  here="$(offset_minutes "$(date +%z)")"
+  there="$(offset_minutes "$(TZ="$TZONE" date +%z)")"
+  echo $(((((MINUTE + here - there) % 60) + 60) % 60))
+}
+
+gate_format() {
+  if [ "$CADENCE" = "5h" ]; then
+    echo "%H"
+  else
+    echo "%u-%H"
+  fi
+}
+
+gate_pattern() {
+  local h out="" day
+  if [ "$CADENCE" = "5h" ]; then
+    for h in $HOURS; do
+      out="$out|$(printf '%02d' "$h")"
+    done
+    echo "${out#|}"
+  else
+    day="$DOW"
+    if [ "$day" -eq 0 ]; then
+      day=7
+    fi
+    printf '%s-%02d\n' "$day" "$HOURS"
+  fi
+}
+
+# ---------- usage windows and models ----------
+
+run_with_timeout() {
+  local secs="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  else
+    perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
+  fi
+}
+
+# Ask the Codex app server for usage windows or models. No model is called.
+codex_helper() {
+  local mode="$1" bin
+  bin="$(command -v codex || true)"
+  [ -n "$bin" ] || fail "codex CLI not found on PATH"
+  command -v python3 >/dev/null 2>&1 || fail "python3 is needed to read Codex windows and models"
+  python3 - "$mode" "$bin" "$TZONE" "$MINUTE" <<'PY'
+import json
+import subprocess
+import sys
+import threading
+from datetime import datetime, timedelta
+
+mode, binary, zone_name, minute = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+method, params = {"windows": ("account/rateLimits/read", None), "models": ("model/list", {})}[mode]
+proc = subprocess.Popen([binary, "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, text=True)
+timer = threading.Timer(30, proc.kill)
+timer.start()
+
+
+def send(message):
+    proc.stdin.write(json.dumps(message) + "\n")
+    proc.stdin.flush()
+
+
+request = {"jsonrpc": "2.0", "id": 2, "method": method}
+if params is not None:
+    request["params"] = params
+answer = None
+try:
+    send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+          "params": {"clientInfo": {"name": "rate-window-ticks", "version": "1"}}})
+    send({"jsonrpc": "2.0", "method": "initialized"})
+    send(request)
+    for line in proc.stdout:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("id") == 2:
+            answer = message
+            break
+except BrokenPipeError:
+    pass
+finally:
+    timer.cancel()
+    proc.kill()
+if answer is None:
+    sys.exit("no answer from codex app-server")
+if "error" in answer:
+    sys.exit("codex app-server error: " + json.dumps(answer["error"]))
+result = answer.get("result") or {}
+
+if mode == "models":
+    for model in result.get("data") or result.get("models") or []:
+        name = model.get("model") or model.get("id") or ""
+        if name:
+            print(name + "\t" + (model.get("displayName") or ""))
+    sys.exit(0)
+
+try:
+    from zoneinfo import ZoneInfo
+    zone = ZoneInfo(zone_name)
+except Exception:
+    zone = None
+limits = result.get("rateLimits") or {}
+print("plan=" + str(limits.get("planType") or "unknown"))
+has_5h = False
+weekly_reset = None
+windows = [w for w in (limits.get("primary"), limits.get("secondary")) if w]
+for window in windows:
+    mins = window.get("windowDurationMins")
+    resets = window.get("resetsAt")
+    when = datetime.fromtimestamp(resets, zone).isoformat(timespec="seconds") if resets else "unknown"
+    print("window=%sm used=%s%% resets_at=%s" % (mins, window.get("usedPercent"), when))
+    if mins == 300:
+        has_5h = True
+    if mins == 10080 and resets:
+        weekly_reset = resets
+print("source=live")
+if not windows:
+    print("cadence=none")
+    print("note=this plan reports no usage window, so a tick has nothing to start")
+else:
+    print("cadence=" + ("5h" if has_5h else "weekly"))
+if weekly_reset and zone is not None:
+    reset = datetime.fromtimestamp(weekly_reset, zone)
+    tick = reset.replace(minute=minute, second=0, microsecond=0)
+    if tick < reset:
+        tick += timedelta(hours=1)
+    print("weekly_suggestion=%s %s" % (tick.strftime("%a").lower(), tick.strftime("%H:%M")))
+PY
+}
+
+# Pick the model whose id and name contain every word of the hint. Among
+# matches, prefer a low-effort variant, then the first one offered.
+match_model() {
+  awk -F '\t' -v hint="$1" '
+    BEGIN {
+      h = tolower(hint)
+      gsub(/or equivalent/, "", h)
+      n = split(h, words, /[^a-z0-9.]+/)
+    }
+    NF >= 2 && $1 != "" {
+      text = tolower($1 " " $2)
+      ok = 1
+      any = 0
+      for (i = 1; i <= n; i++) {
+        if (words[i] == "") continue
+        any = 1
+        if (index(text, words[i]) == 0) { ok = 0; break }
+      }
+      if (ok && any) {
+        if (first == "") first = $1
+        if (low == "" && index(tolower($1), "low") > 0) low = $1
+      }
+    }
+    END { if (low != "") print low; else if (first != "") print first }
+  '
+}
+
+cmd_windows() {
+  parse_args "$HOSTS" "$@"
+  load_schedule
+  echo "host=$HOST"
+  case "$HOST" in
+    claude)
+      echo "source=default"
+      echo "cadence=5h"
+      echo "note=Claude subscription plans have a 5-hour session window, and Claude Code has no command that reads it outside a session. Use --cadence weekly if this account has no 5-hour window."
+      ;;
+    codex)
+      codex_helper windows
+      ;;
+    agy)
+      echo "source=plan"
+      echo "cadence=ask"
+      echo "note=Google AI Pro and Ultra refresh quota every five hours for each model group (Gemini; Claude and GPT). Other plans refresh weekly. agy shows the plan when it starts and in /help."
+      ;;
+  esac
+}
+
+cmd_models() {
+  parse_args "$HOSTS" "$@"
+  local lines="" model
+  case "$HOST" in
+    claude)
+      lines="$(printf 'sonnet\tClaude Sonnet, latest\nopus\tClaude Opus, latest\nhaiku\tClaude Haiku, latest\n')"
+      ;;
+    codex)
+      MINUTE=0
+      lines="$(codex_helper models)"
+      ;;
+    agy)
+      command -v agy >/dev/null 2>&1 || fail "agy not found on PATH"
+      lines="$(run_with_timeout 60 agy models 2>/dev/null || true)"
+      ;;
+  esac
+  model="$(match_model "$MODEL_HINT" <<<"$lines")"
+  echo "host=$HOST"
+  echo "model_hint=$MODEL_HINT"
+  echo "model=$model"
+  if [ -z "$model" ]; then
+    echo "note=no offered model matches the hint, so a local job uses the CLI's default model"
+  fi
+}
+
+cmd_plan() {
+  parse_args "$HOSTS" "$@"
+  require_zone
+  load_schedule
+  echo "host=$HOST"
+  echo "name=$TICK_NAME"
+  echo "prompt=$TICK_PROMPT"
+  echo "model_hint=$MODEL_HINT"
+  echo "cadence=$CADENCE"
+  echo "tz=$TZONE"
+  echo "times=$(schedule_summary)"
+  echo "cron=$(cron_tz)"
+  echo "cron_utc=$(utc_cron)"
+  echo "rrule=$(rrule)"
+  echo "cloud_method=$(cloud_method "$HOST")"
+  case "$HOST" in
+    claude)
+      echo "repository=none"
+      echo "connectors=none"
+      ;;
+    codex)
+      echo "task=standalone with no project, a new chat for each run, low reasoning effort"
+      ;;
+    agy)
+      echo "group=$GROUP"
+      echo "remote_request=Use the schedule tool to create a recurring daemon schedule with CronExpression '$(utc_cron)' (UTC), IsDaemon true, and Prompt '$TICK_PROMPT'. Then reply with the schedule ID."
+      ;;
+  esac
+}
+
+# ---------- local jobs ----------
+
+state_dir_for() {
+  echo "$STATE_ROOT/$1"
+}
+
+label_for() {
+  echo "local.$1.$2"
+}
+
+runner_path() {
+  echo "$STATE_DIR/run-$1.sh"
+}
+
+log_path() {
+  echo "$STATE_DIR/$1.log"
+}
+
+plist_path() {
+  echo "$HOME/Library/LaunchAgents/$1.plist"
+}
+
+cron_marker() {
+  echo "# $1:$2"
+}
+
+cron_line() {
+  local minute="$1" runner="$2" host="$3"
+  echo "$minute * * * * /bin/bash $(printf '%q' "$runner") $(cron_marker "$TICK_NAME" "$host")"
+}
+
+current_crontab() {
+  crontab -l 2>/dev/null || true
+}
+
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
+
+# installed, broken (files without a loaded job) or not-installed, for the job
+# NAME (current or legacy) of HOST.
+job_state() {
+  local name="$1" host="$2" label runner table
+  label="$(label_for "$name" "$host")"
+  runner="$(state_dir_for "$name")/run-$host.sh"
+  case "$(uname -s)" in
+    Darwin)
+      if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+        echo installed
+      elif [ -f "$(plist_path "$label")" ] || [ -f "$runner" ]; then
+        echo broken
+      else
+        echo not-installed
+      fi
+      ;;
+    Linux)
+      table="$(current_crontab)"
+      if grep -qF "$(cron_marker "$name" "$host")" <<<"$table"; then
+        echo installed
+      elif [ -f "$runner" ]; then
+        echo broken
+      else
+        echo not-installed
+      fi
+      ;;
+    *) echo not-installed ;;
+  esac
+}
+
+remove_job() {
+  local name="$1" host="$2" label table
+  label="$(label_for "$name" "$host")"
+  case "$(uname -s)" in
+    Darwin)
+      launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+      rm -f "$(plist_path "$label")"
+      ;;
+    Linux)
+      table="$(current_crontab)"
+      if [ -n "$table" ]; then
+        { grep -vF "$(cron_marker "$name" "$host")" <<<"$table" || true; } | crontab -
+      fi
+      ;;
+  esac
+  rm -f "$(state_dir_for "$name")/run-$host.sh"
+}
+
+render_runner() {
+  local host="$1" bin="$2" log="$3" model="$4" cmd
+  cmd="$(host_trigger_command "$host" "$bin" "$model")"
+  cat <<RUNNER
+#!/bin/bash
+# Generated by rate-window-ticks install for $host: $CADENCE at $(schedule_summary) $TZONE. Reinstall to change it.
+set -u
+export PATH=$(printf '%q' "$PATH")
+case "\$(TZ=$(printf '%q' "$TZONE") date +$(gate_format))" in
+  $(gate_pattern)) ;;
+  *) exit 0 ;;
+esac
+cd $(printf '%q' "$STATE_DIR") || exit 1
+{
+  printf '=== %s host=%s\n' "\$(date '+%Y-%m-%dT%H:%M:%S%z')" $host
+  $cmd</dev/null &
+  pid=\$!
+  ( sleep $RUN_TIMEOUT_SECONDS && kill "\$pid" 2>/dev/null ) &
+  watchdog=\$!
+  wait "\$pid"
+  status=\$?
+  kill "\$watchdog" 2>/dev/null
+  printf 'exit=%s\n' "\$status"
+} >>$(printf '%q' "$log") 2>&1
+RUNNER
+}
+
+render_plist() {
+  local label="$1" runner="$2" minute="$3" log="$4"
+  cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$(xml_escape "$label")</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$(xml_escape "$runner")</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Minute</key>
+    <integer>$minute</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>$(xml_escape "$log")</string>
+  <key>StandardErrorPath</key>
+  <string>$(xml_escape "$log")</string>
+</dict>
+</plist>
+PLIST
+}
+
+cmd_install() {
+  parse_args "$HOSTS" "$@"
+  require_zone
+  load_schedule
+  local bin state legacy minute runner log label plist="" os
+  bin="$(command -v "$HOST" || true)"
+  case "$bin" in
+    /*) ;;
+    *) fail "$HOST CLI not found on PATH" ;;
+  esac
+  os="$(uname -s)"
+  label="$(label_for "$TICK_NAME" "$HOST")"
+  case "$os" in
+    Darwin) plist="$(plist_path "$label")" ;;
+    Linux) command -v crontab >/dev/null 2>&1 || fail "crontab not found; install cron first" ;;
+    *) fail "unsupported OS: $os" ;;
+  esac
+  state="$(job_state "$TICK_NAME" "$HOST")"
+  legacy="$(job_state "$LEGACY_NAME" "$HOST")"
+  minute="$(local_minute)"
+  runner="$(runner_path "$HOST")"
+  log="$(log_path "$HOST")"
+
+  echo "host=$HOST"
+  echo "scheduler=local"
+  echo "cli=$bin"
+  echo "model=${MODEL:-cli-default}"
+  echo "prompt=$TICK_PROMPT"
+  echo "cadence=$CADENCE"
+  echo "times=$(schedule_summary)"
+  echo "tz=$TZONE"
+  echo "local_minute=$minute"
+  echo "runner=$runner"
+  echo "log=$log"
+  if [ "$os" = "Darwin" ]; then
+    echo "launchd_plist=$plist"
+  else
+    echo "crontab_marker=$(cron_marker "$TICK_NAME" "$HOST")"
+  fi
+  echo "existing_state=$state"
+  echo "legacy_state=$legacy"
+
+  if [ "$state" = "installed" ] && [ "$REPLACE" -eq 0 ]; then
+    echo "status=already-installed"
+    echo "rate-window-ticks: the $HOST tick is already installed; use --replace to reinstall it" >&2
+    return 0
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ "$legacy" != "not-installed" ]; then
+      echo "would remove the $LEGACY_NAME job for $HOST"
+    fi
+    echo "--- runner"
+    render_runner "$HOST" "$bin" "$log" "$MODEL"
+    if [ "$os" = "Darwin" ]; then
+      echo "--- plist"
+      render_plist "$label" "$runner" "$minute" "$log"
+    else
+      echo "--- crontab line"
+      cron_line "$minute" "$runner" "$HOST"
+    fi
+    echo "--- dry run: nothing written"
+    return 0
+  fi
+
+  if [ "$legacy" != "not-installed" ]; then
+    remove_job "$LEGACY_NAME" "$HOST"
+    [ "$(job_state "$LEGACY_NAME" "$HOST")" = "not-installed" ] || fail "the $LEGACY_NAME job for $HOST is still present"
+    echo "legacy=removed"
+  fi
+
+  mkdir -p "$STATE_DIR"
+  render_runner "$HOST" "$bin" "$log" "$MODEL" >"$runner.tmp"
+  chmod 700 "$runner.tmp"
+  mv "$runner.tmp" "$runner"
+
+  if [ "$os" = "Darwin" ]; then
+    mkdir -p "$HOME/Library/LaunchAgents"
+    render_plist "$label" "$runner" "$minute" "$log" >"$plist"
+    launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+    launchctl bootstrap "gui/$(id -u)" "$plist"
+  else
+    local table
+    table="$(current_crontab)"
+    {
+      grep -vF "$(cron_marker "$TICK_NAME" "$HOST")" <<<"$table" || true
+      cron_line "$minute" "$runner" "$HOST"
+    } | sed '/^$/d' | crontab -
+  fi
+  [ "$(job_state "$TICK_NAME" "$HOST")" = "installed" ] || fail "the $HOST job did not load"
+  echo "status=installed"
+}
+
+cmd_uninstall() {
+  parse_args "$HOSTS" "$@"
+  local state legacy
+  state="$(job_state "$TICK_NAME" "$HOST")"
+  legacy="$(job_state "$LEGACY_NAME" "$HOST")"
+  echo "host=$HOST"
+  echo "existing_state=$state"
+  echo "legacy_state=$legacy"
+  if [ "$state" = "not-installed" ] && [ "$legacy" = "not-installed" ]; then
+    echo "status=not-installed"
+    return 0
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ "$state" != "not-installed" ]; then
+      echo "would remove the $TICK_NAME job for $HOST and $(runner_path "$HOST")"
+    fi
+    if [ "$legacy" != "not-installed" ]; then
+      echo "would remove the $LEGACY_NAME job for $HOST"
+    fi
+    return 0
+  fi
+  if [ "$state" != "not-installed" ]; then
+    remove_job "$TICK_NAME" "$HOST"
+  fi
+  if [ "$legacy" != "not-installed" ]; then
+    remove_job "$LEGACY_NAME" "$HOST"
+  fi
+  [ "$(job_state "$TICK_NAME" "$HOST")" = "not-installed" ] || fail "the $HOST job is still present"
+  [ "$(job_state "$LEGACY_NAME" "$HOST")" = "not-installed" ] || fail "the $LEGACY_NAME job for $HOST is still present"
+  echo "status=removed"
+}
+
+cmd_status() {
+  local hosts host log
+  if [ "$#" -gt 0 ]; then
+    parse_args "$HOSTS" "$@"
+    hosts="$HOST"
+  else
+    hosts="$HOSTS"
+  fi
+  for host in $hosts; do
+    echo "host=$host"
+    echo "cloud_method=$(cloud_method "$host")"
+    echo "state=$(job_state "$TICK_NAME" "$host")"
+    echo "legacy_state=$(job_state "$LEGACY_NAME" "$host")"
+    log="$(log_path "$host")"
+    if [ -f "$log" ]; then
+      echo "recent_log:"
+      tail -n 6 "$log"
+    fi
+  done
+}
+
+main() {
+  local cmd="${1:-}"
+  if [ "$#" -gt 0 ]; then
+    shift
+  fi
+  case "$cmd" in
+    check) cmd_check "$@" ;;
+    windows) cmd_windows "$@" ;;
+    models) cmd_models "$@" ;;
+    plan) cmd_plan "$@" ;;
+    install) cmd_install "$@" ;;
+    uninstall) cmd_uninstall "$@" ;;
+    status) cmd_status "$@" ;;
+    classify) cmd_classify "$@" ;;
+    -h|--help|help) usage ;;
+    "")
+      usage >&2
+      exit 2
+      ;;
+    *) fail "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"

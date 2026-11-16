@@ -1,0 +1,6 @@
+interface:
+  display_name: "setup-agent-rate-window-ticks"
+  short_description: "Schedule quick ticks that start each usage window at set times"
+  default_prompt: "Use $setup-agent-rate-window-ticks to set up my rate window ticks."
+policy:
+  allow_implicit_invocation: false

@@ -82,7 +82,6 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | Split the full working-tree diff into atomic conventional commits |
 | [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.1 | Read production Convex data with a query-only tool and its installer |
 | [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.1 | Review a product area, track findings, and verify improvements with screenshots |
-| [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | 0.10.0 | Schedule quick checks from Codex, Claude Code, or agy using the supported scheduler |
 | [p-close-the-gaps](skills/engineering/p-close-the-gaps) | 🟡 | 0.9.0 | Close the most useful gaps identified by a reality check |
 | [p-copy-deslopifier](skills/comms/p-copy-deslopifier) | 🟡 | 0.9.0 | Remove common AI writing patterns while preserving the intended voice |
 | [p-deep-project-primer](skills/engineering/p-deep-project-primer) | 🟡 | 0.9.0 | Read project instructions and understand the code and architecture |
@@ -104,6 +103,7 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 | [p-tangible-progress](skills/engineering/p-tangible-progress) | 🟡 | 0.9.0 | Keep a session or swarm focused on working software and honest evidence |
 | [p-unsummarizable](skills/comms/p-unsummarizable) | 🟡 | 0.9.0 | Tighten writing while preserving each useful idea |
 | [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | Compare advisor judgments through peer review and a final recommendation |
+| [setup-agent-rate-window-ticks](skills/meta/setup-agent-rate-window-ticks) | 🟡 | 0.11.0 | Schedule quick calls on each provider's cloud so usage windows start at set times |
 | [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | Compare old sessions, branches, PRs, and trackers against current evidence |
 | [teach-me-nugget](skills/meta/teach-me-nugget) | ⚪ | 0.1.0 | Explain a concept from current work with concrete examples and usable heuristics |
 | [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | Port an existing website while preserving SEO, appearance, and cutover safety |
