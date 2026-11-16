@@ -5,7 +5,7 @@
 # supabase, docker) they never exercise — you don't need the Postgres rules if
 # you never run psql.
 #
-# This is DOMAIN SCOPING, NOT SAFETY REDUCTION. All six local.* guards and
+# This is DOMAIN SCOPING, NOT SAFETY REDUCTION. All seven local.* guards and
 # `core` are present, exactly as in `full`. There is no "lax" profile, and the
 # installer structurally rejects any profile missing a guard.
 #
@@ -34,4 +34,5 @@ enabled = [
   "local.no_bypass_prepush",
   "local.no_worktrees",
   "local.agent_loop_guard",
+  "local.convex_prod_credential_read_guard",
 ]

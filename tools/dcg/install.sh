@@ -16,6 +16,7 @@ REQUIRED_GUARDS=(
   local.no_bypass_prepush
   local.no_worktrees
   local.agent_loop_guard
+  local.convex_prod_credential_read_guard
 )
 
 die() { printf 'install.sh: error: %s\n' "$*" >&2; exit 1; }
