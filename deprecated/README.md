@@ -8,7 +8,7 @@ Active workflows must not depend on this archive.
 
 | Skill | Deprecated | Replaced by | Why |
 | --- | --- | --- | --- |
-| `flywheel-conductor` | 2026-09-24 | `prompts/p-flywheel-conductor-jsm.md` | Swarms are driven only through the jsm skill set (`/ntm`, `/vibing-with-ntm`, `/beads-br`, `/beads-bv`). Two conductors meant two places for every rule; the non-jsm fallback was the one nobody ran. |
+| `flywheel-conductor` | 2026-09-24 | `skills/engineering/p-flywheel-conductor-jsm/SKILL.md` | Use the current conductor with jsm's `ntm`, `vibing-with-ntm`, `beads-br`, and `beads-bv` skills. |
 | `project-vision` | 2026-10-14 | None specified | Retired at the owner's request; preserve existing project `VISION.md` files. |
 | `flywheel-local-launcher` | 2026-10-14 | jsm's `ntm` and `vibing-with-ntm` skills | Use the maintained jsm workflows. Archived setup reference includes recovered installed-only model defaults. Existing project helpers require their own migration; this archive is not an active dependency. |
 | `pr-closeout` | 2026-10-14 | None specified | Retired at the owner's request. |
@@ -22,3 +22,8 @@ Renames: `goal-plan` → `write-goal`; `engineering-review` → `codebase-benchm
 `p-pre-mortem` → `p-premortem-general`; `p-premortem-planner` → `p-premortem-spec`.
 These remain active under their new names. The benchmark skill explains how to
 migrate its profile without losing review history.
+
+The root `prompts/` directory was retired on 2026-11-16. All 18 active prompts
+moved into native packages under `skills/`; their names and bodies were preserved.
+See [migrations.json](../migrations.json) for every replacement. Git retains the
+original files. No second active command collection is maintained.

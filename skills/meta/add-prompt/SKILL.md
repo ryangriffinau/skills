@@ -1,18 +1,19 @@
 ---
 name: add-prompt
 status: drafting
-version: 0.6.0
+version: 0.7.0
 tags: [meta, prompts, tooling]
-updated: 2026-10-14
-description: Save a reusable instruction as a portable p-prefixed skill for Claude Code and Codex. Use when the user asks to add a prompt, save an instruction, or grow their prompt library. Preserve user-provided wording verbatim, publish the source, install it, and verify discovery.
+updated: 2026-11-16
+description: Save a reusable instruction as a portable p-prefixed skill for Claude Code, Codex, and Antigravity CLI (agy). Use when the user asks to add a prompt, save an instruction, or grow their prompt library. Preserve user-provided wording verbatim, publish the source, install it, and verify discovery.
 ---
 
 # Add Prompt
 
 A prompt is a skill. The `p-` prefix is a naming choice, not a separate format.
 Create new workflows as `skills/<category>/p-<name>/SKILL.md` packages.
-Existing files under `prompts/` await migration; edit those at their canonical
-location until migrated. Do not create a second source for the same instruction.
+The old `prompts/` directory has been retired. Edit existing prompts in their
+native packages. `migrations.json` records their former paths. Do not create a
+second source or a provider command copy for the same instruction.
 
 ## Steps
 
@@ -45,7 +46,7 @@ location until migrated. Do not create a second source for the same instruction.
    in README. Select this skill and the target agents explicitly:
 
    ```bash
-   npx skills@1.7.1 add ryangriffinau/skills --skill <name> --global --agent codex claude-code --yes
+   npx skills@1.7.1 add ryangriffinau/skills --skill <name> --global --agent codex claude-code antigravity-cli --yes
    ```
 
    Before replacement, compare the complete installed package. Preserve edits and
@@ -56,11 +57,10 @@ location until migrated. Do not create a second source for the same instruction.
    filesystem, discovery API, and visible picker checks. A stale open session may
    need a new chat or reload; do not claim to have observed an untested picker.
 
-For an existing legacy prompt, updating the source also updates Claude's linked
-commands directory. If a native compatibility copy exists, update and verify it
-too. A plain prompt cannot be passed to `skills add`; state that limitation until
-its source is migrated. Keep its body portable rather than adding an absolute
-path back to one machine's checkout.
+Antigravity CLI uses the installer target `antigravity-cli`; `antigravity` targets
+the editor instead. Verify the actual runtime and its skill directory. Retire
+known legacy command bridges only after native discovery succeeds, preserving
+unrelated commands and any local changes outside discovery directories.
 
 ## Completion
 

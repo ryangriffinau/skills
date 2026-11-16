@@ -1,7 +1,13 @@
 ---
+name: p-synthesize-plans
 description: Synthesize competing plans only when Jeffrey's jsm skills are unavailable; otherwise use planning-workflow.
 use_when: Jeffrey's jsm skills are not installed or usable in this runtime.
-argument-hint: [current plan and competing plans]
+argument-hint: "[current plan and competing plans]"
+status: refining
+version: 0.9.0
+tags: [planning, prompts]
+updated: 2026-11-16
+compatibility: "If the host leaves $ARGUMENTS literal, use the user message accompanying this skill invocation as its value."
 ---
 
 Use this fallback only when Jeffrey's jsm skills are not installed or usable.

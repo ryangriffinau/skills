@@ -1,6 +1,11 @@
 ---
+name: p-copy-deslopifier
 description: Brand/voice-neutral cleanup of AI-sounding copy
-argument-hint: []
+argument-hint: "[]"
+status: refining
+version: 0.9.0
+tags: [comms, prompts]
+updated: 2026-11-16
 ---
 
 I want you to read through the complete text carefully and look for any telltale signs of "AI slop" style writing; one big tell is the use of em dash. You should try to replace this with a semicolon, a comma, or just recast the sentence accordingly so it sounds good while avoiding em dash.

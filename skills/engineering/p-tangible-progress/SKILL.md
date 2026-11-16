@@ -1,5 +1,10 @@
 ---
+name: p-tangible-progress
 description: Tangible Progress, Anti-Ceremony, and Honest Credit — bind a session or swarm to working-software-only progress; no process porn, feature-first ratio, absolute honesty, refusal is not delivery
+status: refining
+version: 0.9.0
+tags: [engineering, prompts]
+updated: 2026-11-16
 ---
 
 ## Tangible Progress, Anti-Ceremony, and Honest Credit

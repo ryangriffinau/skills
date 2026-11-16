@@ -9,15 +9,16 @@ skills/<category>/<name>/SKILL.md   # required entrypoint
                         /references/ # optional deep docs
                         /scripts/    # optional tooling
                         /evals/      # optional regression cases
-prompts/p-<name>.md                  # legacy prompt files; native skill migration planned
+migrations.json                     # old prompt paths and their native package replacements
 ```
 
 Categories are organizational only (`decision`, `planning`, `engineering`, `git`, `web`, `comms`, `meta`). Maturity is **not** a folder — promoting a skill is a one-line frontmatter edit, never a directory move.
 
-The `p-` prefix is a naming convention. Plain prompt files do not enter the
-native Codex skill catalog or normal `skills add` discovery. See the
-[distribution plan](docs/specs/skills-distribution/PLAN.md) for the proposed
-unified format and the current local conductor bridge.
+The `p-` prefix is a naming convention. Every active workflow, including prompts,
+lives in a native skill package. Do not recreate a root `prompts/` directory or
+provider command copies. Git retains the old prompt history, and `migrations.json`
+records the new paths. Archived entrypoints use `RETIRED.md` so recursive skill
+discovery cannot install them.
 
 ## Frontmatter schema
 

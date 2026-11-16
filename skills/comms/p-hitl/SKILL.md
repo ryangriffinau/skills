@@ -1,6 +1,12 @@
 ---
+name: p-hitl
 description: Hand back each decision only I can make (situation, options, recommendation), dense enough to decide in one read
-argument-hint: [optional: which items; blank = all open]
+argument-hint: "[optional: which items; blank = all open]"
+status: refining
+version: 0.9.0
+tags: [comms, prompts]
+updated: 2026-11-16
+compatibility: "If the host leaves $ARGUMENTS literal, use the user message accompanying this skill invocation as its value."
 ---
 
 Hand back every open decision that only I can make, as numbered blocks, most urgent first.

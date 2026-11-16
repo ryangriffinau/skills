@@ -4,7 +4,8 @@ read_when: Finding design and maintenance documentation for this skills collecti
 
 # Documentation
 
-- [Skills discovery and distribution](specs/skills-distribution/PLAN.md): completed October maintenance, current compatibility findings, and the reviewed implementation plan.
+- [Skill installation and prompt migration](specs/skills-distribution/INSTALLATION.md): native packages, provider paths, verification, and recovery.
+- [Skills discovery and distribution](specs/skills-distribution/PLAN.md): October audit and the remaining proposed manager work.
 - [Comprehensive planning](specs/comprehensive-planning/README.md): planning templates and rubric.
 - [Codebase benchmark](specs/engineering-review-process/PLAN.md): original engineering-review workflow design; active skill is now `codebase-benchmark`.
 - [Project updates](specs/project-update-skill/PLAN.md): project update skill design.

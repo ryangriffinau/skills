@@ -1,117 +1,117 @@
 # skills
 
-Ryan Griffin's agent skills for Claude Code and Codex — the canonical home for the skills I've authored. Other repos (`ai-config`, project templates) install **from here**, so this repo is the source of truth, not a mirror.
+Ryan Griffin's agent skills for Codex, Claude Code, and Antigravity CLI (`agy`). This repository contains the canonical source for the skills I authored. Other repositories install this collection from here.
 
-Only skills I wrote live here. Skills I use but didn't author (Anthropic's, Matt Pocock's, marketing packs, etc.) are installed separately and intentionally excluded.
+Third-party collections, including jsm and Matt Pocock's skills, are installed separately.
 
 ## Install
 
-Install with the [`skills`](https://github.com/vercel-labs/skills) CLI. Choose scope and agents explicitly:
+Install with the [`skills`](https://github.com/vercel-labs/skills) CLI. Choose scope and providers explicitly:
 
 ```bash
-# All published skills, available across projects in Codex and Claude Code
-npx skills@1.7.1 add ryangriffinau/skills --global --agent codex claude-code --skill '*' --yes
+# All published skills, available across projects in all three providers
+npx skills@1.7.1 add ryangriffinau/skills --global --agent codex claude-code antigravity-cli --skill '*' --yes
 
 # One skill
-npx skills@1.7.1 add ryangriffinau/skills --global --agent codex claude-code --skill review-council --yes
+npx skills@1.7.1 add ryangriffinau/skills --global --agent codex claude-code antigravity-cli --skill review-council --yes
 ```
 
-Version 1.7.1 requires Node >=22.20.0. This version was checked during the October 2026 discovery audit. Check a newer CLI's help before adopting changed commands.
+CLI 1.7.1 requires Node >=22.20.0. If the system Node is older, use an isolated supported runtime:
 
-GitHub is the source. Only committed, pushed content is available through the remote install. Without `--global`, installation is project-scoped. Global installs use `~/.agents/skills` with agent links, and provenance is recorded in `~/.agents/.skill-lock.json`; project installs use `skills-lock.json`.
+```bash
+npx --yes --package=node@22.20.0 --package=skills@1.7.1 -- skills add ryangriffinau/skills --global --agent codex claude-code antigravity-cli --skill '*' --yes
+```
 
-### Multiple tools — the CLI handles it, no manual symlinks
+GitHub supplies the published source. Only committed, pushed content is available through a remote install. Without `--global`, installation is project-scoped. The provider name `antigravity-cli` selects agy; `antigravity` selects the separate IDE.
 
-For the global commands above, the CLI installs skill directories and creates the required agent links. To cover more agents, re-run `add` with explicit `--agent` targets. `experimental_sync` imports skills from `node_modules`; it is not a general repair command for global installations. Plain files under `prompts/` are not installed by `skills add`.
+Global installations use `~/.agents/skills`. Codex reads this universal location. The installer creates provider links under `~/.claude/skills` and `~/.gemini/antigravity-cli/skills`. Global provenance is recorded in `~/.agents/.skill-lock.json`; project installs use `skills-lock.json`.
+
+See [installation and migration](docs/specs/skills-distribution/INSTALLATION.md) for verification, backup locations, and cleanup of older installations.
 
 ## Updating
 
-Installed skills are vendored copies; editing this checkout does not update them. Inspect local edits before updating, including supporting files under `references/` and `scripts/`:
+Installed skills are vendored copies. Editing this checkout does not update them. Inspect and preserve local edits before replacement, including files under `references/` and `scripts/`.
 
 ```bash
 npx skills@1.7.1 list --global
 npx skills@1.7.1 update review-council --global
 ```
 
-In 1.7.1, `check` is an alias for `update`, **not a read-only check**. An unqualified global update can update skills from other sources too. Prefer named updates for this collection. Preserve local changes before replacement; a matching `SKILL.md` alone does not prove the complete installation matches the source.
+In CLI 1.7.1, `check` aliases the mutating `update` command. An unqualified global update can change other collections too. Prefer named updates for this collection. Compare complete package contents, because a matching `SKILL.md` does not prove the references and scripts also match.
 
-See the [discovery audit and migration plan](docs/specs/skills-distribution/PLAN.md) for the verified local state, immediate flywheel fix, and planned unified installer.
+The proposed `rskills` manager remains [planned](docs/specs/skills-distribution/PLAN.md). The public CLI above is the current installation route.
+
+## Invocation and migrated prompts
+
+All active workflows now live under `skills/<category>/<name>/SKILL.md`. The 18 former files under `prompts/` were migrated with their bodies preserved. The `p-` prefix remains a personal naming convention. [migrations.json](migrations.json) records each old path, new package path, and body hash at migration time.
+
+The old `prompts/` folder is retired. Do not create flat command files, forwarding wrappers, or another copy of a migrated workflow. Native packages replace the old command-directory bridges.
+
+- Codex CLI: select `$<skill-name>` or use `/skills`.
+- Codex desktop: select the skill with `@`.
+- Claude Code: invoke `/<skill-name>`.
+- agy: use `/skills` to inspect discovery, then request the skill by name.
+
+For example, select `p-flywheel-conductor-jsm` to conduct a swarm using the installed jsm skills. Installing the package does not install NTM or provide tools that a host lacks. Open a new chat or reload the provider if its existing skill catalog is stale.
 
 ## Maturity
 
-Each skill declares a `status` in its `SKILL.md` frontmatter. A skill only earns **battle-tested** when it clears the structural bar *and* has survived real-world use — see [CONVENTIONS.md](CONVENTIONS.md).
+Each skill declares its status in frontmatter. A skill earns `battle-tested` only after it meets the structural requirements and has survived real use. See [CONVENTIONS.md](CONVENTIONS.md). The migrated prompt packages start at `refining` while their native package form is exercised across providers.
 
 | Badge | Status | Meaning |
 |---|---|---|
-| 🟢 | `battle-tested` | Layered structure + real-world use; relied on in production work |
-| 🟡 | `refining` | Solid and in active use, still being sharpened |
-| ⚪ | `drafting` | Early; works for me but unproven and may reference my personal setup |
+| 🟢 | `battle-tested` | Layered structure and real-world use |
+| 🟡 | `refining` | In active use and still being improved |
+| ⚪ | `drafting` | Early work that may depend on the author's setup |
 
 ## Skills
 
-| Skill | Status | Ver | Tags | Purpose |
-|---|---|---|---|---|
-| [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | decision-making, multi-agent | 5-advisor council + anonymized peer review + chairman verdict + decision ledger |
-| [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | web, migration, seo | Port a live / Webflow / CMS site into a repo, preserving SEO, fidelity, and cutover safety |
-| [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.0 | design, frontend, audit, ux, beads | Per-area design review: audit → standing-approved vs ruling-required triage → materialise findings into issues → implement with screenshot evidence |
-| [write-project-update](skills/comms/write-project-update) | 🟡 | 0.10.1 | communication, reporting, changelog | Evidence-grounded customer, public-changelog, or internal project update with asks, source audit, and channel-native formatting |
-| [write-goal](skills/planning/write-goal) | ⚪ | 0.4.0 | planning, goals | Turn a fuzzy ambition into a verifiable goal + execution plan for long-running agent work |
-| [codebase-benchmark](skills/engineering/codebase-benchmark) | ⚪ | 0.2.0 | engineering, audit, quality | Repeatable whole-codebase scorecard with evidence and trends across reviews |
-| [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | engineering, git, audit | Audit old sessions / threads / repos against current evidence without closing anything |
-| [commit](skills/git/commit) | ⚪ | 0.3.0 | git | Conventional commits scoped to current-session work only |
-| [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | git | Split the entire working-tree diff into atomic conventional commits |
-| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.6.0 | meta, prompts | Save portable `p-*` skills with verbatim bodies and verify publication and installation |
-| [teach-me-nugget](skills/meta/teach-me-nugget) | ⚪ | 0.1.0 | learning, mentoring | Explain a concept from current work with concrete examples and usable heuristics |
-| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.0 | convex, production, verification, dcg | Read prod Convex state with a query-only tool + installer that also ships the dcg pack it pairs with |
+| Skill | Status | Version | Purpose |
+|---|---|---|---|
+| [add-prompt](skills/meta/add-prompt) | ⚪ | 0.7.0 | Save portable `p-*` skills with verbatim bodies, publish them, and verify installation |
+| [codebase-benchmark](skills/engineering/codebase-benchmark) | ⚪ | 0.2.0 | Produce a whole-codebase scorecard with evidence and trends across reviews |
+| [commit](skills/git/commit) | ⚪ | 0.3.0 | Create conventional commits scoped to current-session work |
+| [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | Split the full working-tree diff into atomic conventional commits |
+| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.0 | Read production Convex data with a query-only tool and its installer |
+| [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.1 | Review a product area, track findings, and verify improvements with screenshots |
+| [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | 0.10.0 | Schedule quick checks from Codex, Claude Code, or agy using the supported scheduler |
+| [p-close-the-gaps](skills/engineering/p-close-the-gaps) | 🟡 | 0.9.0 | Close the most useful gaps identified by a reality check |
+| [p-copy-deslopifier](skills/comms/p-copy-deslopifier) | 🟡 | 0.9.0 | Remove common AI writing patterns while preserving the intended voice |
+| [p-deep-project-primer](skills/engineering/p-deep-project-primer) | 🟡 | 0.9.0 | Read project instructions and understand the code and architecture |
+| [p-deploy-and-verify](skills/engineering/p-deploy-and-verify) | 🟡 | 0.9.0 | Deploy an app and verify desktop and mobile behavior |
+| [p-draft-plan](skills/planning/p-draft-plan) | 🟡 | 0.9.0 | Draft a fallback plan when jsm skills are unavailable; otherwise use `planning-workflow` |
+| [p-flywheel-conductor-jsm](skills/engineering/p-flywheel-conductor-jsm) | 🟡 | 0.9.0 | Conduct an NTM swarm using jsm skills and the requested pane configuration |
+| [p-fresh-eyes-review](skills/engineering/p-fresh-eyes-review) | 🟡 | 0.9.0 | Re-read recent code changes and fix obvious issues |
+| [p-handoff-context-maxxed](skills/comms/p-handoff-context-maxxed) | 🟡 | 0.9.0 | Prepare a next-session prompt that preserves the work and ideas |
+| [p-hitl](skills/comms/p-hitl) | 🟡 | 0.9.0 | Present decisions only the user can make, with facts, options, and recommendations |
+| [p-idea-wizard](skills/planning/p-idea-wizard) | 🟡 | 0.9.0 | Generate, evaluate, and implement project improvement ideas |
+| [p-planning-workflow-with-handoff](skills/planning/p-planning-workflow-with-handoff) | 🟡 | 0.9.0 | Draft a plan and prepare a self-contained prompt for an independent model |
+| [p-premortem-general](skills/planning/p-premortem-general) | 🟡 | 0.9.0 | Assume a plan failed and identify the likely causes and early warning signs |
+| [p-premortem-spec](skills/planning/p-premortem-spec) | 🟡 | 0.9.0 | Revise a plan around its likely failure modes |
+| [p-reality-check](skills/engineering/p-reality-check) | 🟡 | 0.9.0 | Assess completion when jsm skills are unavailable; otherwise use `planning-workflow` |
+| [p-reality-check-biggest-flaws](skills/engineering/p-reality-check-biggest-flaws) | 🟡 | 0.9.2 | Run a project reality check and identify the largest flaws and fixes |
+| [p-smart-accretive-improvement](skills/planning/p-smart-accretive-improvement) | 🟡 | 0.9.0 | Identify the single most useful addition to the current work |
+| [p-smarter-beads-wizard](skills/planning/p-smarter-beads-wizard) | 🟡 | 0.9.1 | Review and improve beads using idea-wizard and beads-workflow |
+| [p-synthesize-plans](skills/planning/p-synthesize-plans) | 🟡 | 0.9.0 | Synthesize plans when jsm skills are unavailable; otherwise use `planning-workflow` |
+| [p-tangible-progress](skills/engineering/p-tangible-progress) | 🟡 | 0.9.0 | Keep a session or swarm focused on working software and honest evidence |
+| [p-unsummarizable](skills/comms/p-unsummarizable) | 🟡 | 0.9.0 | Tighten writing while preserving each useful idea |
+| [review-council](skills/decision/review-council) | 🟡 | 0.9.0 | Compare advisor judgments through peer review and a final recommendation |
+| [stale-work-audit](skills/engineering/stale-work-audit) | ⚪ | 0.1.0 | Compare old sessions, branches, PRs, and trackers against current evidence |
+| [teach-me-nugget](skills/meta/teach-me-nugget) | ⚪ | 0.1.0 | Explain a concept from current work with concrete examples and usable heuristics |
+| [website-porter](skills/web/website-porter) | 🟡 | 0.9.0 | Port an existing website while preserving SEO, appearance, and cutover safety |
+| [write-goal](skills/planning/write-goal) | ⚪ | 0.4.0 | Turn an ambition into a verifiable goal and execution plan |
+| [write-project-update](skills/comms/write-project-update) | 🟡 | 0.10.1 | Write an evidence-grounded customer, public, or internal project update |
 
-> Drafting skills are still being generalized or battle-tested. Keep repo-specific behavior behind a local init/profile.
-
-> See the [retirement and rename index](deprecated/README.md). Archived entrypoints use `RETIRED.md` to keep them out of recursive discovery. Existing copies need an ownership-checked migration. Use [`p-flywheel-conductor-jsm`](prompts/p-flywheel-conductor-jsm.md) with installed jsm skills for the flywheel.
-
-## Prompts
-
-The current checkout stores older `p-*` prompts as plain Markdown files. This is a legacy packaging split, not a different kind of workflow. New `p-*` workflows are standard `SKILL.md` packages under `skills/`; the planned migration will move the older files there while keeping the `p-` names.
-
-Claude Code accepts `/p-<name>` from its commands directory. Codex CLI uses `$<skill-name>` or `/skills`; the desktop app uses its `@` skill picker. The legacy `/prompts:<name>` syntax is not supported by the audited Codex CLI 0.159.3. See [OpenAI's skill docs](https://learn.chatgpt.com/docs/build-skills) and the [version-specific audit](docs/specs/skills-distribution/PLAN.md).
-
-On Ryan's audited machine, a native compatibility copy exposes `$p-flywheel-conductor-jsm` in Codex and `@p-flywheel-conductor-jsm` in the desktop skill catalog. It contains the complete prompt and was updated with the source on October 14. It is not yet part of remote `npx skills` installs. Open a new chat if the desktop picker has a stale catalog. The planned migration removes this extra copy.
-
-Prompts marked with `†` are attributed to Jeffrey Emanuel's [Jeffrey's Prompts](https://jeffreysprompts.com/).
-
-| Prompt | Status | Purpose |
-|---|---|---|
-| [p-smart-accretive-improvement](prompts/p-smart-accretive-improvement.md) | 🟢 | The single smartest, most accretive next addition to a plan or project |
-| [p-premortem-general](prompts/p-premortem-general.md) | 🟢 | Assume it failed — work backwards to the causes |
-| [p-unsummarizable](prompts/p-unsummarizable.md) | 🟢 | Strip writing until no word can be cut without losing an idea |
-| [p-draft-plan](prompts/p-draft-plan.md) † | 🟡 | Fallback planning when jsm skills are unavailable; otherwise use `planning-workflow` |
-| [p-planning-workflow-with-handoff](prompts/p-planning-workflow-with-handoff.md) | 🟡 | Draft a comprehensive plan and a context-complete prompt for an independent model |
-| [p-synthesize-plans](prompts/p-synthesize-plans.md) † | 🟢 | Fallback plan synthesis when jsm skills are unavailable; otherwise use `planning-workflow` |
-| [p-reality-check](prompts/p-reality-check.md) † | 🟢 | Fallback project assessment when jsm skills are unavailable; otherwise use `planning-workflow` |
-| [p-close-the-gaps](prompts/p-close-the-gaps.md) | 🟡 | After a reality check, close the biggest bang-for-the-buck gaps yourself with real agency and no ceremony |
-| [p-fresh-eyes-review](prompts/p-fresh-eyes-review.md) † | 🟢 | Re-read recent code changes with fresh eyes and fix obvious issues |
-| [p-idea-wizard](prompts/p-idea-wizard.md) † | 🟢 | Generate, evaluate, and implement top project improvement ideas |
-| [p-premortem-spec](prompts/p-premortem-spec.md) † | 🟡 | Premortem a plan and revise it around failure modes |
-| [p-deep-project-primer](prompts/p-deep-project-primer.md) | 🟡 | Read project instructions and understand architecture |
-| [p-deploy-and-verify](prompts/p-deploy-and-verify.md) | 🟡 | Deploy an app and verify desktop and mobile behavior |
-| [p-copy-deslopifier](prompts/p-copy-deslopifier.md) | 🟡 | Brand/voice-neutral cleanup of AI-sounding copy, narrower than `copy-editing` |
-| [p-flywheel-conductor-jsm](prompts/p-flywheel-conductor-jsm.md) | 🟢 | Prime a project and conduct an NTM swarm using jsm skills and the requested pane configuration |
-| [p-tangible-progress](prompts/p-tangible-progress.md) | 🟢 | Bind a session or swarm to working-software-only progress — no process porn, honest credit |
-| [p-hitl](prompts/p-hitl.md) | 🟡 | Hand back each decision only you can make: situation, options, recommendation, dense enough to decide in one read |
-| [p-handoff-context-maxxed](prompts/p-handoff-context-maxxed.md) | 🟡 | Produce the perfect next-session kickoff prompt so no thread or great idea is lost |
-| [p-smarter-beads-wizard](skills/planning/p-smarter-beads-wizard) | 🟡 | Read every bead deeply, revise the beads with idea-wizard's smartest ideas, then offer polishing and a complementary round |
-| [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | From Claude Code, Codex or agy in a terminal, schedule a quick check at fixed Melbourne times on the provider's cloud, or as a local job where the CLI has no cloud scheduler |
-| [p-reality-check-biggest-flaws](skills/engineering/p-reality-check-biggest-flaws) | 🟡 | Read AGENTS.md and README.md, run reality-check-for-project end to end, then find the biggest flaws, their fixes, and any capability that is special-cased instead of emergent from composition |
+See the [retirement and rename index](deprecated/README.md) for older names. Archived entrypoints use `RETIRED.md` so recursive discovery does not reinstall them. Preserve local edits and verify ownership before removing an old installation.
 
 ## Credits
 
-This collection stands on others' work:
+- Vercel Labs maintains the [`skills`](https://github.com/vercel-labs/skills) CLI used to install and update this collection.
+- Matt Pocock's skills influenced the approach to writing focused agent skills. His collection is installed separately.
+- Jeffrey Emanuel created the [Agent Flywheel](https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup) and [Jeffrey's Prompts](https://jeffreysprompts.com/). `p-draft-plan`, `p-synthesize-plans`, `p-reality-check`, `p-fresh-eyes-review`, `p-idea-wizard`, and `p-premortem-spec` derive from his prompts. The archived `p-plan-to-beads` and `p-agent-swarm-launcher` also came from that work. Current flywheel workflows use his maintained jsm skills.
+- Andrej Karpathy's LLM Council inspired `review-council`. Its peer-review flow and decision ledger were added here.
 
-- **Vercel Labs** — the [`skills`](https://github.com/vercel-labs/skills) CLI used to install and update this collection.
-- **Matt Pocock** — the craft of writing high-quality, single-purpose agent skills (his `writing-great-skills` is the reference). I install his skills (`grilling`, `tdd`, `writing-great-skills`, …) globally rather than vendor them into this repo.
-- **Jeffrey Emanuel** — the [Agent Flywheel](https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup) (NTM, Agent Mail, beads, DCG, UBS, CASS). The planning/execution loop and prompts marked `†` come from his flywheel / [Jeffrey's Prompts](https://jeffreysprompts.com/). My older conductor and launcher are archived; current flywheel workflows use his maintained jsm skills.
-- **Andrej Karpathy** — `review-council` is based on his LLM Council idea; the peer-review flow and decision ledger are mine.
-
-Everything not attributed above is original. Skills I use but didn't author (Anthropic's, Matt Pocock's, marketing packs) are installed separately and intentionally excluded from this repo.
+Everything not attributed above is original. Third-party skill packages remain outside this repository.
 
 ## License
 

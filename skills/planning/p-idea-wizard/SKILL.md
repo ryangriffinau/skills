@@ -1,6 +1,11 @@
 ---
+name: p-idea-wizard
 description: Generate, evaluate, and implement top project improvement ideas
-argument-hint: []
+argument-hint: "[]"
+status: refining
+version: 0.9.0
+tags: [planning, prompts]
+updated: 2026-11-16
 ---
 
 Come up with your very best ideas for improving this project.

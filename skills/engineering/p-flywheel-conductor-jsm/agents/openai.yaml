@@ -1,0 +1,6 @@
+interface:
+  display_name: "p-flywheel-conductor-jsm"
+  short_description: "Run the jsm flywheel conductor for this project"
+  default_prompt: "Use $p-flywheel-conductor-jsm for this project with the pane counts and effort I specify."
+policy:
+  allow_implicit_invocation: false

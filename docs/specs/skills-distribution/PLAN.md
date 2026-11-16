@@ -1,6 +1,6 @@
 ---
-status: ready-to-implement
-updated: 2026-10-14
+status: package-migration-complete-manager-proposed
+updated: 2026-11-16
 read_when: Investigating missing skills or implementing this collection's portable packages and installer.
 ---
 
@@ -13,9 +13,15 @@ Support direct `npx skills` installation and an installed `rskills` command.
 Use the public CLI as the installation engine. Add collection-specific diagnosis,
 local-edit protection, migrations, and recovery around it.
 
-Maintenance and the immediate conductor repair are complete. The package
-conversion and new manager below are ready for implementation, not implemented.
-Do not start a swarm to test packaging.
+The 18 legacy prompts have now moved into native skill packages. See the
+[November migration record](INSTALLATION.md) for the current installation and
+verification details. The separate `rskills` manager remains proposed.
+
+The audit below records the October 14 state and the design decisions made then.
+Its NTM 1.18.3 and Beads schema 11 warnings are historical: on November 16, NTM
+reports 1.38.0 and br 0.7.6 reads this repo's schema 19 successfully. The native
+packages replace the earlier machine-local prompt copies. Do not start a swarm
+to test packaging.
 
 ## Completed maintenance
 

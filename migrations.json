@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "prompts": [
+    {
+      "name": "p-close-the-gaps",
+      "from": "prompts/p-close-the-gaps.md",
+      "to": "skills/engineering/p-close-the-gaps/SKILL.md",
+      "bodySha256": "ef69f07b3c39d0e3df341c6c1b69055edd6497a03f19cb02acee8c81c7718cc3"
+    },
+    {
+      "name": "p-copy-deslopifier",
+      "from": "prompts/p-copy-deslopifier.md",
+      "to": "skills/comms/p-copy-deslopifier/SKILL.md",
+      "bodySha256": "2ca8099d23db10c503eddd86ee8e8f1d3033fe470a39e0b8bc01e3ec512661ae"
+    },
+    {
+      "name": "p-deep-project-primer",
+      "from": "prompts/p-deep-project-primer.md",
+      "to": "skills/engineering/p-deep-project-primer/SKILL.md",
+      "bodySha256": "e38b70cb094ba1e8871851ef55ce61a83ccb00c73562b8a86b9b942de1940262"
+    },
+    {
+      "name": "p-deploy-and-verify",
+      "from": "prompts/p-deploy-and-verify.md",
+      "to": "skills/engineering/p-deploy-and-verify/SKILL.md",
+      "bodySha256": "334e880d22d3fdf847aff10aa405106b82b9c2f7ab1646794280149d23f9e327"
+    },
+    {
+      "name": "p-draft-plan",
+      "from": "prompts/p-draft-plan.md",
+      "to": "skills/planning/p-draft-plan/SKILL.md",
+      "bodySha256": "cf217b7c28defb3f5a6949fa21955eba410e158edddfabe925254b47bb37b519"
+    },
+    {
+      "name": "p-flywheel-conductor-jsm",
+      "from": "prompts/p-flywheel-conductor-jsm.md",
+      "to": "skills/engineering/p-flywheel-conductor-jsm/SKILL.md",
+      "bodySha256": "da0c38fcb8ffed07a79ea9b101ef14af74f5c5a53d0bbebf5441a41ebf865f55"
+    },
+    {
+      "name": "p-fresh-eyes-review",
+      "from": "prompts/p-fresh-eyes-review.md",
+      "to": "skills/engineering/p-fresh-eyes-review/SKILL.md",
+      "bodySha256": "1a84527e4aaa0243a45e86e9accafad840c8e928eea666af1f72c61ed6c91f7c"
+    },
+    {
+      "name": "p-handoff-context-maxxed",
+      "from": "prompts/p-handoff-context-maxxed.md",
+      "to": "skills/comms/p-handoff-context-maxxed/SKILL.md",
+      "bodySha256": "570af107fd8c4b60494a149f53ed0a988ac65be3b40b4094ea5e0d7e131f086b"
+    },
+    {
+      "name": "p-hitl",
+      "from": "prompts/p-hitl.md",
+      "to": "skills/comms/p-hitl/SKILL.md",
+      "bodySha256": "8edd77234c601d0b9816f52e811d74fe4bea6492385e48782e7ad8a46b730deb"
+    },
+    {
+      "name": "p-idea-wizard",
+      "from": "prompts/p-idea-wizard.md",
+      "to": "skills/planning/p-idea-wizard/SKILL.md",
+      "bodySha256": "c7d3d7673660bee919fe1475f9a6a42a2218455daf7972ac8d10969e6a2c196c"
+    },
+    {
+      "name": "p-planning-workflow-with-handoff",
+      "from": "prompts/p-planning-workflow-with-handoff.md",
+      "to": "skills/planning/p-planning-workflow-with-handoff/SKILL.md",
+      "bodySha256": "5d5374ebbc14c4308ce4ab32d21450b68d049fd3cd32f36dfe3a9b44666edde2"
+    },
+    {
+      "name": "p-premortem-general",
+      "from": "prompts/p-premortem-general.md",
+      "to": "skills/planning/p-premortem-general/SKILL.md",
+      "bodySha256": "12146725b20098e1e8c1322963be2c1802763d31b63345d08321ae3b64a020fd"
+    },
+    {
+      "name": "p-premortem-spec",
+      "from": "prompts/p-premortem-spec.md",
+      "to": "skills/planning/p-premortem-spec/SKILL.md",
+      "bodySha256": "0c69a2ce184d2d0af6c8247e7a81def622184d6c5715bb8b240d602b64997525"
+    },
+    {
+      "name": "p-reality-check",
+      "from": "prompts/p-reality-check.md",
+      "to": "skills/engineering/p-reality-check/SKILL.md",
+      "bodySha256": "51cb8087bbf4296eaad6339a52eb2d87c41394e89b44e6b979a634a78723175d"
+    },
+    {
+      "name": "p-smart-accretive-improvement",
+      "from": "prompts/p-smart-accretive-improvement.md",
+      "to": "skills/planning/p-smart-accretive-improvement/SKILL.md",
+      "bodySha256": "335c0e30aaa83d5a71b7eb3168b73b12de4ed2a32ea947f49b235125656914d3"
+    },
+    {
+      "name": "p-synthesize-plans",
+      "from": "prompts/p-synthesize-plans.md",
+      "to": "skills/planning/p-synthesize-plans/SKILL.md",
+      "bodySha256": "2dc096c3fb3ba1159742e7e37e6b8c4fba95057bafa6833b439b9263ff1b3037"
+    },
+    {
+      "name": "p-tangible-progress",
+      "from": "prompts/p-tangible-progress.md",
+      "to": "skills/engineering/p-tangible-progress/SKILL.md",
+      "bodySha256": "548b6068eb1d1f58209bd044c89f13b2d421338b059f78a30a062b6c520efd6b"
+    },
+    {
+      "name": "p-unsummarizable",
+      "from": "prompts/p-unsummarizable.md",
+      "to": "skills/comms/p-unsummarizable/SKILL.md",
+      "bodySha256": "de9ea86b2a2ca7278b61de5496a1d17668fa280236b50e0c0337bf3bfcc6aaf6"
+    }
+  ]
+}

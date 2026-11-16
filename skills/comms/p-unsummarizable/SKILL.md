@@ -1,6 +1,12 @@
 ---
+name: p-unsummarizable
 description: Make writing unsummarizable — strip all fluff so no word can be cut without losing an idea
-argument-hint: [text to tighten, or omit to set the standard for this session]
+argument-hint: "[text to tighten, or omit to set the standard for this session]"
+status: refining
+version: 0.9.0
+tags: [comms, prompts]
+updated: 2026-11-16
+compatibility: "If the host leaves $ARGUMENTS literal, use the user message accompanying this skill invocation as its value."
 ---
 
 Make this writing unsummarizable: $ARGUMENTS

@@ -2,6 +2,10 @@
 name: p-flywheel-conductor-jsm
 description: Conduct an NTM swarm with jsm skills, 2 Claude Opus 5.5 high panes, 2 GPT-6 Astra high panes, and a 4-minute tending loop.
 argument-hint: "[cod-panes] [cc-panes] [tick-interval] — defaults: 2 cod (GPT-6 Astra, high), 2 cc (Claude Opus 5.5, high), 4m"
+status: refining
+version: 0.9.0
+tags: [engineering, prompts]
+updated: 2026-11-16
 ---
 
 Arguments (if given): the number of cod panes, the number of cc panes, and the loop tick interval. Apply explicit user overrides before the defaults below. If absent, default to 2 cc panes (Claude Opus 5.5, high effort), 2 cod panes (GPT-6 Astra, high effort), and a 4-minute tick.
