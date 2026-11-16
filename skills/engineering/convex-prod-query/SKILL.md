@@ -1,9 +1,9 @@
 ---
 name: convex-prod-query
 status: drafting
-version: 0.3.0
+version: 0.3.1
 tags: [convex, production, verification, dcg, tooling]
-updated: 2026-09-17
+updated: 2026-11-16
 description: "Read production Convex state from an agent session without approval prompts and without any way to write or deploy. Use when verifying work is complete on prod, checking prod data or function results, comparing dev vs prod, or when dcg blocks `convex run ... --prod` for something that is only a query. Ships the `convex-prod-query` CLI (query-only by construction) plus an installer that wires the shim, Claude Code deny rules, and the companion dcg pack it pairs with."
 ---
 

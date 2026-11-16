@@ -80,7 +80,7 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 | [codebase-benchmark](skills/engineering/codebase-benchmark) | ⚪ | 0.2.0 | Produce a whole-codebase scorecard with evidence and trends across reviews |
 | [commit](skills/git/commit) | ⚪ | 0.3.0 | Create conventional commits scoped to current-session work |
 | [commit-whole-diff](skills/git/commit-whole-diff) | ⚪ | 0.3.0 | Split the full working-tree diff into atomic conventional commits |
-| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.0 | Read production Convex data with a query-only tool and its installer |
+| [convex-prod-query](skills/engineering/convex-prod-query) | ⚪ | 0.3.1 | Read production Convex data with a query-only tool and its installer |
 | [joint-design-review](skills/web/joint-design-review) | ⚪ | 0.2.1 | Review a product area, track findings, and verify improvements with screenshots |
 | [p-agent-5-hour-trigger](skills/meta/p-agent-5-hour-trigger) | 🟡 | 0.10.0 | Schedule quick checks from Codex, Claude Code, or agy using the supported scheduler |
 | [p-close-the-gaps](skills/engineering/p-close-the-gaps) | 🟡 | 0.9.0 | Close the most useful gaps identified by a reality check |
