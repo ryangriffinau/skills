@@ -71,6 +71,13 @@ jobs:
       - name: Lint skill metadata
         run: scripts/lint-skills
 
+      - name: Check skill distribution and linter regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/lint-skills.test.sh
+          bash tests/skill-distribution.test.sh
+
       - name: Enforce skill version bumps
         if: github.event_name == 'pull_request'
         run: scripts/lint-skills --check-version-bumps --base-ref "origin/${{ github.base_ref }}"
