@@ -14,10 +14,13 @@ migrations.json                     # old prompt paths and their native package 
 
 Categories are organizational only (`decision`, `planning`, `engineering`, `git`, `web`, `comms`, `meta`). Maturity is **not** a folder — promoting a skill is a one-line frontmatter edit, never a directory move.
 
-The `p-` prefix is a naming convention. Every active workflow, including prompts,
-lives in a native skill package. Do not recreate a root `prompts/` directory or
-provider command copies. Git retains the old prompt history, and `migrations.json`
-records the new paths. Archived entrypoints use `RETIRED.md` so recursive skill
+Prompts are ordinary skills with plain kebab-case names. Do not add a `p-`
+prefix, and choose a name that does not collide with an installed skill from
+another collection. Prompt bodies do not use `$ARGUMENTS` placeholders; hosts
+pass invocation text alongside the skill. Every active workflow, including
+prompts, lives in a native skill package. Do not recreate a root `prompts/`
+directory or provider command copies. Git retains the old prompt history, and
+`migrations.json` records each legacy name, current skill name, and path. Archived entrypoints use `RETIRED.md` so recursive skill
 discovery cannot install them.
 
 ## Frontmatter schema

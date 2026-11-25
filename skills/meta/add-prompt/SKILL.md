@@ -1,16 +1,17 @@
 ---
 name: add-prompt
 status: drafting
-version: 0.7.1
+version: 0.8.0
 tags: [meta, prompts, tooling]
-updated: 2026-11-16
-description: Save a reusable instruction as a portable p-prefixed skill for Claude Code, Codex, and Antigravity CLI (agy). Use when the user asks to add a prompt, save an instruction, or grow their prompt library. Preserve user-provided wording verbatim, publish the source, install it, and verify discovery.
+updated: 2026-11-25
+description: Save a reusable instruction as a portable skill for Claude Code, Codex, and Antigravity CLI (agy). Use when the user asks to add a prompt, save an instruction, or grow their prompt library. Preserve user-provided wording verbatim, publish the source, install it, and verify discovery.
 ---
 
 # Add Prompt
 
-A prompt is a skill. The `p-` prefix is a naming choice, not a separate format.
-Create new workflows as `skills/<category>/p-<name>/SKILL.md` packages.
+A prompt is a skill. Create new workflows as `skills/<category>/<name>/SKILL.md`
+packages with plain kebab-case names. Do not add a `p-` prefix. Check that the
+name does not collide with an installed skill from another collection.
 The old `prompts/` directory has been retired. Edit existing prompts in their
 native packages. `migrations.json` records their former paths. Do not create a
 second source or a provider command copy for the same instruction.
@@ -26,6 +27,8 @@ second source or a provider command copy for the same instruction.
 3. **Preserve the body.** If the user provides text, save it verbatim. Preserve
    wording, order, punctuation, line breaks, and placeholders. Add metadata
    around it. Do not silently add instructions, arguments, or negative rules.
+   Do not add a `$ARGUMENTS` placeholder; hosts pass invocation text alongside
+   the skill.
    Put optional improvements in the response after completing the request.
 4. **Handle host differences honestly.** Codex CLI selects `$<name>` or `/skills`;
    the desktop app uses `@<name>`; Claude Code uses `/<name>`. A flat Markdown

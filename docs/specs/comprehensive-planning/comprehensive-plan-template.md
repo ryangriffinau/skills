@@ -1,12 +1,12 @@
 ---
-summary: "Output contract for a franken_ocr-calibre comprehensive plan; the eleven sections /p-draft-plan must fill."
+summary: "Output contract for a franken_ocr-calibre comprehensive plan; the eleven sections /draft-plan must fill."
 status: "active"
 stage: "planning"
 owner: "Ryan"
 updated_at: "2026-06-26"
 read_when:
   - "When drafting a comprehensive plan and you need the exact section skeleton and conventions to fill."
-  - "When pointing /p-draft-plan or /p-synthesize-plans at a target structure."
+  - "When pointing /draft-plan or /synthesize-plans at a target structure."
 related_docs:
   - "docs/specs/comprehensive-planning/README.md"
   - "docs/specs/comprehensive-planning/plan-rubric.md"

@@ -49,11 +49,15 @@ try:
     else:
         files = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
 
-    names, sources, targets = set(), set(), set()
+    # `name` is the legacy prompt name tied to `from`; `skill` is the current
+    # package identity, which may differ after a rename.
+    names, skills, sources, targets = set(), set(), set(), set()
     for item in migrations:
-        name, old, new = item["name"], item["from"], item["to"]
+        name, skill, old, new = item["name"], item["skill"], item["from"], item["to"]
         old_path, new_path = local_path(old), local_path(new)
         check(name not in names, f"duplicate migration name: {name}")
+        check(skill not in skills, f"duplicate migration skill: {skill}")
+        skills.add(skill)
         check(old not in sources, f"duplicate migration source: {old}")
         check(new not in targets, f"duplicate migration destination: {new}")
         names.add(name)
@@ -63,7 +67,7 @@ try:
         check(not old_path.exists(), f"legacy prompt still present: {old}")
         check(new_path.is_file(), f"migrated skill missing: {new}")
         check(
-            re.fullmatch(r"skills/[^/]+/" + re.escape(name) + r"/SKILL\.md", new) is not None,
+            re.fullmatch(r"skills/[^/]+/" + re.escape(skill) + r"/SKILL\.md", new) is not None,
             f"migration destination does not match skill name: {new}",
         )
         if new_path.is_file():
@@ -94,6 +98,7 @@ try:
         name = name_fields[0].strip("\"'")
         check(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) is not None, f"invalid skill name: {relative}")
         check(len(name) <= 64, f"skill name exceeds 64 characters: {relative}")
+        check(not name.startswith("p-"), f"skill name uses the retired p- prefix: {relative}")
         check(name == path.parent.name, f"name does not match directory: {relative}")
         check(name not in identities, f"duplicate skill identity {name}: {relative} and {identities.get(name)}")
         identities[name] = relative
@@ -117,7 +122,7 @@ try:
             check(resolved.exists(), f"missing bundled reference: {relative} -> {target}")
 
     for item in migrations:
-        check(identities.get(item["name"]) == item["to"], f"migrated identity is not discoverable: {item['name']}")
+        check(identities.get(item["skill"]) == item["to"], f"migrated identity is not discoverable: {item['skill']}")
 except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
     errors.append(str(exc))
 

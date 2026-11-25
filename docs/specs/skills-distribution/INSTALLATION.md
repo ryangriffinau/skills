@@ -6,12 +6,12 @@ read_when: Installing this collection, verifying prompt migration, or recovering
 # Native skill installation
 
 All 34 published workflows are packages under `skills/`. The 18 former files in
-`prompts/` moved without changing their bodies. Their `p-` names remain the same.
+`prompts/` moved without changing their bodies. On 2026-11-25 they lost the `p-` prefix; `migrations.json` maps each legacy name to its current skill.
 [migrations.json](../../../migrations.json) records each move and the original
 body hash. Git preserves the original files; no duplicate prompt archive is needed.
 
-The seven workflows that used `$ARGUMENTS` include compatibility metadata for
-hosts that leave that placeholder literal. Argument hints are scalar strings.
+Prompt bodies do not use `$ARGUMENTS`; hosts pass invocation text alongside
+the skill. Argument hints are scalar strings.
 The conductor retains its existing explicit-invocation policy. Workflow-specific
 requirements such as NTM, `/loop`, or a terminal still apply; installing a skill
 does not add those tools to a host.

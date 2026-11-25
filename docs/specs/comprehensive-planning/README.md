@@ -21,7 +21,7 @@ related_docs:
 
 ## The core insight `[VERIFIED]`
 
-Our `/p-draft-plan`, `/p-synthesize-plans`, `/p-plan-to-beads`, `/p-pre-mortem`, and `/p-unsummarizable` **are Jeffrey's own prompts**, or near-variants. The franken_ocr document is therefore **not** the product of prompts we lack. It is the product of three things our pipeline does not yet supply:
+Our `/draft-plan`, `/synthesize-plans`, `/p-plan-to-beads`, `/premortem-general`, and `/unsummarizable` **are Jeffrey's own prompts**, or near-variants. The franken_ocr document is therefore **not** the product of prompts we lack. It is the product of three things our pipeline does not yet supply:
 
 1. **A grounded front-half.** ~19% of his document is a sourced "target dossier" reverse-engineering the exact thing being built, *before* any solution design. None of our three best specs has an analogue — they open with "Problem," he opens with 143 lines of cited ground truth.
 2. **An output contract.** A fixed 11-section skeleton with conventions our prompts never demand: evidence tags, goals carrying a *verification owner*, proof obligations worked inline, a layered verification ladder, EV-ranked levers, and an Open-Questions Register that **gates phases**.
@@ -48,12 +48,12 @@ Single high floor. Depth flexes with **surface size**, never with rigor — a th
 | # | Stage | Driver | Tool we already have | Enforces | Exit gate |
 |---|-------|--------|----------------------|----------|-----------|
 | 0 | **Articulate** | You | the Stage-0 intake above | a concrete ground-truth target | the five answers exist |
-| 1 | **Dossier** | Agent (investigation mode) | `/p-deep-project-primer` + code/web investigation | every fact tagged + sourced; complete work-surface derived | the **exists / build / gap** table is filled; unknowns are `OQ-N` |
-| 2 | **Draft (fan-out)** | Each frontier model independently | `/p-draft-plan` → the [template](./comprehensive-plan-template.md) | the full 11-section contract | ≥2 independent drafts, each filling every section |
-| 3 | **Synthesize** | Strongest model | `/p-synthesize-plans` | best-of-all-worlds hybrid, no attribution | one merged plan |
+| 1 | **Dossier** | Agent (investigation mode) | `/deep-project-primer` + code/web investigation | every fact tagged + sourced; complete work-surface derived | the **exists / build / gap** table is filled; unknowns are `OQ-N` |
+| 2 | **Draft (fan-out)** | Each frontier model independently | `/draft-plan` → the [template](./comprehensive-plan-template.md) | the full 11-section contract | ≥2 independent drafts, each filling every section |
+| 3 | **Synthesize** | Strongest model | `/synthesize-plans` | best-of-all-worlds hybrid, no attribution | one merged plan |
 | 4 | **Grill** | You ↔ agent | `/grill-me` (or `grill-with-docs`) | rationale + rejected alternatives on every major decision | every decision has a "why" and a "why-not"; new unknowns → OQ |
-| 5 | **Pre-mortem** | Agent | `/p-pre-mortem` → `/p-premortem-planner` | failure modes → risk rows + cheap early signals | top failure causes are OQ entries or risk rows; plan revised |
-| 6 | **Density** | Agent | `/p-unsummarizable` | every sentence load-bearing | no sentence survives deletion without losing an idea |
+| 5 | **Pre-mortem** | Agent | `/premortem-general` → `/p-premortem-planner` | failure modes → risk rows + cheap early signals | top failure causes are OQ entries or risk rows; plan revised |
+| 6 | **Density** | Agent | `/unsummarizable` | every sentence load-bearing | no sentence survives deletion without losing an idea |
 | 7 | **Grade** | Agent | [`plan-rubric.md`](./plan-rubric.md) | the calibre floor | rubric ≥ floor; **below floor → loop to the weakest stage** |
 | 8 | **Decompose** | Agent | `/p-plan-to-beads` | epics = phases; OQ = blocking P0 bead; spike = bead-with-contract | beads graph mirrors the roadmap; no impl bead depends on an open OQ |
 
@@ -87,7 +87,7 @@ Use the full floor for anything **large, novel, irreversible, or cross-boundary*
 
 ## Status & next move
 
-- **Now:** this pipeline, the [template](./comprehensive-plan-template.md), and the [rubric](./plan-rubric.md) exist and are usable immediately by pointing `/p-draft-plan` at the template and grading with the rubric.
+- **Now:** this pipeline, the [template](./comprehensive-plan-template.md), and the [rubric](./plan-rubric.md) exist and are usable immediately by pointing `/draft-plan` at the template and grading with the rubric.
 - **Next (highest-value, not yet done):** write **one worked exemplar** — rewrite a real in-flight workstream to full calibre as the north-star reference. A copyable exemplar teaches the standard faster than any template.
 - **Later:** promote the template + an orchestrator prompt (`/p-deep-plan`) into the prompts library so the pipeline is invocable as a slash command across projects, not just documented.
 

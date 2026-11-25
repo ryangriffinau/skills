@@ -36,7 +36,7 @@ For each: **0** = absent · **1** = present but thin/ungrounded · **2** = full,
 | 12 | **Phased roadmap w/ gates** | unordered tasks | phases without gates | phases with Goals·Tasks·Exit-gates; Phase −1 truth pack |
 | 13 | **EV-ranked levers / spikes** | unprioritized | ranked by feel | EV formula applied; spikes carry artifact·proof·fallback |
 | 14 | **Beads-readiness** | no handoff | loose mapping | epics=phases, OQ=blocking bead, file=bead+test+criteria |
-| 15 | **Density** | padded prose | some fluff | survives `/p-unsummarizable` — no cuttable sentence |
+| 15 | **Density** | padded prose | some fluff | survives `/unsummarizable` — no cuttable sentence |
 
 ## Scoring & gate
 
