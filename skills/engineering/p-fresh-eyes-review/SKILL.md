@@ -1,16 +1,10 @@
 ---
 name: p-fresh-eyes-review
-description: Re-read recent code changes with fresh eyes and fix obvious issues
-argument-hint: "[optional context, files, or diff scope]"
+description: Check over everything again with fresh eyes for blunders, mistakes, oversights, logical issues, and bugs
 status: refining
-version: 0.9.0
+version: 0.10.0
 tags: [engineering, prompts]
-updated: 2026-11-16
-compatibility: "If the host leaves $ARGUMENTS literal, use the user message accompanying this skill invocation as its value."
+updated: 2026-11-25
 ---
 
-Great, now carefully read over all of the new code you just wrote and any existing code you just modified with fresh eyes. Use ultrathink-level scrutiny.
-
-Context:
-
-$ARGUMENTS
+Check over everything again with fresh eyes, looking for any blunders, mistakes, errors, oversights, omissions, logical issues, problems, misconceptions, confusion, bugs, etc. Use your expertise and carefully ruminate with fresh eyes.

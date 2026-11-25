@@ -88,7 +88,7 @@ Each skill declares its status in frontmatter. A skill earns `battle-tested` onl
 | [p-deploy-and-verify](skills/engineering/p-deploy-and-verify) | 🟡 | 0.9.0 | Deploy an app and verify desktop and mobile behavior |
 | [p-draft-plan](skills/planning/p-draft-plan) | 🟡 | 0.9.0 | Draft a fallback plan when jsm skills are unavailable; otherwise use `planning-workflow` |
 | [p-flywheel-conductor-jsm](skills/engineering/p-flywheel-conductor-jsm) | 🟡 | 0.9.0 | Conduct an NTM swarm using jsm skills and the requested pane configuration |
-| [p-fresh-eyes-review](skills/engineering/p-fresh-eyes-review) | 🟡 | 0.9.0 | Re-read recent code changes and fix obvious issues |
+| [p-fresh-eyes-review](skills/engineering/p-fresh-eyes-review) | 🟡 | 0.10.0 | Check over everything again with fresh eyes for mistakes, oversights, and bugs |
 | [p-handoff-context-maxxed](skills/comms/p-handoff-context-maxxed) | 🟡 | 0.9.0 | Prepare a next-session prompt that preserves the work and ideas |
 | [p-hitl](skills/comms/p-hitl) | 🟡 | 0.9.0 | Present decisions only the user can make, with facts, options, and recommendations |
 | [p-idea-wizard](skills/planning/p-idea-wizard) | 🟡 | 0.9.0 | Generate, evaluate, and implement project improvement ideas |
